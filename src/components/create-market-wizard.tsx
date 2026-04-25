@@ -395,6 +395,16 @@ export function CreateMarketWizard() {
           sharesToken,
           conditionId,
           predTokens: predictionTokens,
+          // enriched fields for indexing
+          description: market.description,
+          endTime: market.endTime,
+          oracle: market.oracle,
+          collateral: COLLATERAL_TOKEN,
+          hookAddress: LMSR_HOOK_ADDRESS,
+          lmsrB: LMSR_B_DEFAULT.toString(),
+          resolution: market.resolution,
+          attention: market.attention,
+          outcomes: finalMarket.markets,
         }),
       });
       if (regRes.ok) {
