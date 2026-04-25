@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { WalletButton } from "@/components/wallet-button";
 
 export default function Home() {
@@ -94,7 +95,28 @@ export default function Home() {
           Cast verifiable votes. Build credibility. Shape the discourse — wallet-first.
         </p>
 
-        <WalletButton />
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <WalletButton />
+          <Link
+            href="/create-market"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.6rem 1.25rem',
+              border: '1px solid var(--border)',
+              color: 'var(--muted)',
+              fontFamily: 'var(--font-geist-mono)',
+              fontSize: '0.8rem',
+              letterSpacing: '0.05em',
+              textTransform: 'uppercase',
+              textDecoration: 'none',
+              transition: 'color 0.15s, border-color 0.15s',
+            }}
+          >
+            Create Market →
+          </Link>
+        </div>
 
         {/* Decorative rule */}
         <div
