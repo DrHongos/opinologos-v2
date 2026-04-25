@@ -1,26 +1,125 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --ink: #0d0d0d;
+  --paper: #f5f5f0;
+  --amber: #f59e0b;
+  --amber-dim: #92400e;
+  --muted: #6b6b6b;
+  --border: rgba(245, 245, 240, 0.12);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--font-geist-sans), sans-serif;
+}
+
+/* Wallet button */
+.wallet-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.25rem;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: none;
+  outline: none;
+}
+
+.wallet-btn--connect {
+  background: var(--amber);
+  color: var(--ink);
+  font-weight: 700;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 8px 100%, 0 calc(100% - 8px));
+}
+
+.wallet-btn--connect:hover {
+  background: var(--paper);
+}
+
+.wallet-btn__icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.wallet-btn--disconnect {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  font-size: 0.7rem;
+  padding: 0.35rem 0.75rem;
+}
+
+.wallet-btn--disconnect:hover {
+  border-color: var(--paper);
+  color: var(--paper);
+}
+
+.wallet-btn--loading {
+  background: transparent;
+  border: 1px solid var(--border);
+  gap: 0.3rem;
+  padding: 0.75rem 1.25rem;
+  cursor: not-allowed;
+}
+
+.wallet-btn__dot {
+  width: 4px;
+  height: 4px;
+  background: var(--muted);
+  border-radius: 50%;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.wallet-btn__dot:nth-child(2) { animation-delay: 0.2s; }
+.wallet-btn__dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+/* Connected state */
+.wallet-connected {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.wallet-connected__info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--border);
+  background: rgba(245, 159, 11, 0.06);
+}
+
+.wallet-connected__indicator {
+  width: 6px;
+  height: 6px;
+  background: var(--amber);
+  border-radius: 50%;
+  animation: glow 2s ease-in-out infinite;
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 159, 11, 0.4); }
+  50% { box-shadow: 0 0 0 4px rgba(245, 159, 11, 0); }
+}
+
+.wallet-connected__address {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  color: var(--paper);
 }
