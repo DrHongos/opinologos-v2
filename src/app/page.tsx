@@ -98,6 +98,25 @@ export default function Home() {
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
           <WalletButton />
           <Link
+            href="/markets"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.6rem 1.25rem',
+              border: '1px solid var(--border)',
+              color: 'var(--muted)',
+              fontFamily: 'var(--font-geist-mono)',
+              fontSize: '0.8rem',
+              letterSpacing: '0.05em',
+              textTransform: 'uppercase',
+              textDecoration: 'none',
+              transition: 'color 0.15s, border-color 0.15s',
+            }}
+          >
+            Browse Markets →
+          </Link>
+          <Link
             href="/create-market"
             style={{
               display: 'inline-flex',
