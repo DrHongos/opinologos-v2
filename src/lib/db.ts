@@ -33,6 +33,7 @@ export async function initSchema() {
 
   // Migrate existing installs — no-ops on fresh schema
   const newCols = [
+    `ALTER TABLE markets ADD COLUMN IF NOT EXISTS conditions JSONB`,
     `ALTER TABLE markets ADD COLUMN IF NOT EXISTS description TEXT`,
     `ALTER TABLE markets ADD COLUMN IF NOT EXISTS end_time TIMESTAMPTZ`,
     `ALTER TABLE markets ADD COLUMN IF NOT EXISTS oracle TEXT`,

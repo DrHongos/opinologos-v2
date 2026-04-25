@@ -9,8 +9,11 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^3.0.0",
     "@privy-io/react-auth": "^3.22.2",
+    "@types/dagre": "^0.7.54",
     "@vercel/postgres": "^0.10.0",
+    "@xyflow/react": "^12.10.2",
     "next": "16.2.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",

@@ -260,7 +260,8 @@ function MarketCard({
   const hasTags  = topics.length + entities.length + keywords.length > 0;
 
   return (
-    <article
+    <Link
+      href={`/markets/${market.slug}`}
       className="ms-card"
       style={{ animationDelay: `${Math.min(index, 11) * 0.045}s` }}
     >
@@ -317,6 +318,6 @@ function MarketCard({
           {market.slug}.eth&nbsp;↗
         </a>
       </footer>
-    </article>
+    </Link>
   );
 }
