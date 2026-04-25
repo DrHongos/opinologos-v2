@@ -197,6 +197,7 @@ export function CreateMarketWizard() {
 
   // Step 5 — Publish
   const [finalCid, setFinalCid] = useState('');
+  const [ensSlug, setEnsSlug] = useState('');
 
   // UI
   const [loading, setLoading] = useState(false);
@@ -378,7 +379,28 @@ export function CreateMarketWizard() {
       });
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error ?? 'Upload failed');
-      setFinalCid(data.cid as string);
+      const cid = data.cid as string;
+      setFinalCid(cid);
+
+      // Register in DB for ENS gateway resolution
+      const regRes = await fetch('/api/markets/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: market.id,
+          question: market.question,
+          questionCid,
+          marketCid: cid,
+          osIndex,
+          sharesToken,
+          conditionId,
+          predTokens: predictionTokens,
+        }),
+      });
+      if (regRes.ok) {
+        const { slug } = await regRes.json();
+        setEnsSlug(slug as string);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unknown error');
     } finally {
@@ -540,11 +562,19 @@ export function CreateMarketWizard() {
               <div className="cmw__info-grid">
                 <Field label="Question CID" value={questionCid} />
                 <Field label="Market CID" value={finalCid} />
+                {ensSlug && (
+                  <Field label="ENS name" value={`${ensSlug}.opinologos.eth`} mono={false} />
+                )}
+                {sharesToken && (
+                  <Field label="Alt ENS name" value={`${sharesToken}.opinologos.eth`} />
+                )}
               </div>
               <p className="cmw__success-note">
                 Share the market CID with agents and front-ends. The oracle uses{' '}
                 <code>keccak256(cidBytes)</code> as <code>questionId</code> for{' '}
-                <code>reportPayouts</code>.
+                <code>reportPayouts</code>. Resolve market files via{' '}
+                <code>*.opinologos.eth</code> (CCIP-Read gateway at{' '}
+                <code>/api/ens/</code>).
               </p>
             </div>
           )}
