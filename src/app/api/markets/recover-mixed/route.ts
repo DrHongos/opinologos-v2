@@ -171,6 +171,15 @@ export async function POST(req: NextRequest) {
         description  = EXCLUDED.description
     `;
 
+    const conditionsJson = JSON.stringify([
+      { id: condIdA, slots: nA, question: marketA.question },
+      { id: condIdB, slots: nB, question: marketB.question },
+    ]);
+    await sql.query(
+      `UPDATE markets SET conditions = $1 WHERE id = $2`,
+      [conditionsJson, mixId],
+    );
+
     for (const o of outcomeRecords) {
       await sql`
         INSERT INTO market_tokens (market_id, outcome_index, label, position_id)

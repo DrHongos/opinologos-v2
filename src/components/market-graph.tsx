@@ -31,6 +31,7 @@ interface Outcome {
 interface ConditionInfo {
   id: string;
   slots: number;
+  question?: string | null;
 }
 
 interface MarketData {
@@ -55,6 +56,14 @@ interface ConditionNodeData extends Record<string, unknown> {
   conditionId: string;
   conditionIndex: number;
   slots: number;
+  onOpen: () => void;
+}
+
+interface QuestionNodeData extends Record<string, unknown> {
+  conditionId: string;
+  conditionIndex: number;
+  slots: number;
+  question: string;
   onOpen: () => void;
 }
 
@@ -93,6 +102,21 @@ function ConditionNode({ data }: NodeProps) {
   );
 }
 
+function QuestionNode({ data }: NodeProps) {
+  const d = data as QuestionNodeData;
+  return (
+    <div className="mg-node mg-node--question" onClick={d.onOpen} role="button" tabIndex={0}>
+      <Handle type="target" position={Position.Left} />
+      <Handle type="source" position={Position.Right} />
+      <span className="mg-node__tag">Source {d.conditionIndex + 1}</span>
+      <p className="mg-node__question">{d.question}</p>
+      <span className="mg-node__id">{d.conditionId.slice(0, 10)}…</span>
+      <span className="mg-node__slots">{d.slots} slots</span>
+      <span className="mg-node__hint">Click to manage</span>
+    </div>
+  );
+}
+
 function OutcomeNode({ data }: NodeProps) {
   const d = data as OutcomeNodeData;
   return (
@@ -111,14 +135,23 @@ function OutcomeNode({ data }: NodeProps) {
 const nodeTypes = {
   root: RootNode,
   condition: ConditionNode,
+  question: QuestionNode,
   outcome: OutcomeNode,
 };
 
 // ─── Dagre layout ──────────────────────────────────────────────────────────
 
-const ROOT_W = 260; const ROOT_H = 100;
-const COND_W = 200; const COND_H = 90;
-const OUT_W  = 180; const OUT_H  = 80;
+const ROOT_W  = 260; const ROOT_H  = 100;
+const COND_W  = 200; const COND_H  = 90;
+const QUEST_W = 240; const QUEST_H = 110;
+const OUT_W   = 180; const OUT_H   = 80;
+
+function nodeSize(type: string | undefined): [number, number] {
+  if (type === 'root')      return [ROOT_W, ROOT_H];
+  if (type === 'condition') return [COND_W, COND_H];
+  if (type === 'question')  return [QUEST_W, QUEST_H];
+  return [OUT_W, OUT_H];
+}
 
 function layoutGraph(nodes: Node[], edges: Edge[]) {
   const g = new dagre.graphlib.Graph();
@@ -126,10 +159,7 @@ function layoutGraph(nodes: Node[], edges: Edge[]) {
   g.setDefaultEdgeLabel(() => ({}));
 
   nodes.forEach(n => {
-    const [w, h] =
-      n.type === 'root'      ? [ROOT_W, ROOT_H] :
-      n.type === 'condition' ? [COND_W, COND_H] :
-                               [OUT_W, OUT_H];
+    const [w, h] = nodeSize(n.type);
     g.setNode(n.id, { width: w, height: h });
   });
   edges.forEach(e => g.setEdge(e.source, e.target));
@@ -138,10 +168,7 @@ function layoutGraph(nodes: Node[], edges: Edge[]) {
 
   return nodes.map(n => {
     const { x, y } = g.node(n.id);
-    const [w, h] =
-      n.type === 'root'      ? [ROOT_W, ROOT_H] :
-      n.type === 'condition' ? [COND_W, COND_H] :
-                               [OUT_W, OUT_H];
+    const [w, h] = nodeSize(n.type);
     return { ...n, position: { x: x - w / 2, y: y - h / 2 } };
   });
 }
@@ -165,18 +192,29 @@ function buildGraph(
     draggable: false,
   });
 
+  const isMixed = market.conditions.length > 1;
+
   market.conditions.forEach((cond, ci) => {
     const condId = `cond-${ci}`;
+    const useQuestion = isMixed && !!cond.question;
     nodes.push({
       id: condId,
-      type: 'condition',
+      type: useQuestion ? 'question' : 'condition',
       position: { x: 0, y: 0 },
-      data: {
-        conditionId: cond.id,
-        conditionIndex: ci,
-        slots: cond.slots,
-        onOpen: () => onConditionClick(cond),
-      } satisfies ConditionNodeData,
+      data: useQuestion
+        ? ({
+            conditionId: cond.id,
+            conditionIndex: ci,
+            slots: cond.slots,
+            question: cond.question!,
+            onOpen: () => onConditionClick(cond),
+          } satisfies QuestionNodeData)
+        : ({
+            conditionId: cond.id,
+            conditionIndex: ci,
+            slots: cond.slots,
+            onOpen: () => onConditionClick(cond),
+          } satisfies ConditionNodeData),
       draggable: false,
     });
     edges.push({

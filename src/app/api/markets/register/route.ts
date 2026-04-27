@@ -50,6 +50,7 @@ export async function POST(req: NextRequest) {
     resolution,
     attention,
     outcomes,
+    conditions,   // optional — array of {id, slots, question?} for mixed markets
   } = await req.json();
 
   if (!id || !question || !marketCid) {
@@ -106,6 +107,13 @@ export async function POST(req: NextRequest) {
         attention_keywords  = EXCLUDED.attention_keywords,
         search_vector       = EXCLUDED.search_vector
     `;
+
+    if (conditions) {
+      await sql.query(
+        `UPDATE markets SET conditions = $1 WHERE id = $2`,
+        [JSON.stringify(conditions), id],
+      );
+    }
 
     // Prefer structured outcomes array; fall back to legacy predTokens list
     const outcomeRows: Outcome[] = outcomes ?? (Array.isArray(predTokens) ? predTokens.map((t: string, i: number) => ({

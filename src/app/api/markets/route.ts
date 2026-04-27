@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
   const topic   = searchParams.get('topic');
   const entity  = searchParams.get('entity');
   const keyword = searchParams.get('keyword');
+  const type    = searchParams.get('type');      // 'simple' | 'mixed'
   const before  = searchParams.get('before');   // ISO date or unix timestamp
   const after   = searchParams.get('after');
   const limit   = Math.min(parseInt(searchParams.get('limit') ?? '20', 10), 100);
@@ -52,6 +53,15 @@ export async function GET(req: NextRequest) {
       params.push(keyword);
       p++;
     }
+    if (type === 'mixed') {
+      conditions.push(`question LIKE $${p}`);
+      params.push('% × %');
+      p++;
+    } else if (type === 'simple') {
+      conditions.push(`question NOT LIKE $${p}`);
+      params.push('% × %');
+      p++;
+    }
     if (after) {
       conditions.push(`end_time >= $${p}`);
       params.push(new Date(isNaN(Number(after)) ? after : Number(after) * 1000).toISOString());
@@ -76,7 +86,7 @@ export async function GET(req: NextRequest) {
          collateral, hook_address, lmsr_b,
          resolution_source, resolution_method, resolution_notes,
          attention_entities, attention_topics, attention_signals, attention_keywords,
-         question_cid, market_cid, os_index, shares_token, condition_id, created_at
+         question_cid, market_cid, os_index, shares_token, condition_id, conditions, created_at
        FROM markets
        ${where}
        ${order}

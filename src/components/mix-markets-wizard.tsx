@@ -431,6 +431,10 @@ export function MixMarketsWizard() {
           collateral: COLLATERAL_TOKEN,
           hookAddress: LMSR_HOOK_ADDRESS,
           outcomes: outcomeRecords,
+          conditions: [
+            { id: condIdA, slots: mA.outcomes.length, question: mA.question },
+            { id: condIdB, slots: mB.outcomes.length, question: mB.question },
+          ],
         }),
       });
       const regData = await regRes.json();

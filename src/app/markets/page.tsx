@@ -25,14 +25,20 @@ interface Market {
   market_cid: string | null;
   shares_token: string;
   created_at: string;
+  conditions: Array<{ id: string; slots: number; question?: string | null }> | null;
   outcomes: Outcome[];
 }
 
-type FilterKey = 'q' | 'topic' | 'entity' | 'keyword';
+type FilterKey = 'q' | 'topic' | 'entity' | 'keyword' | 'type';
 type Filters = Record<FilterKey, string>;
 
 const LIMIT = 12;
-const EMPTY_FILTERS: Filters = { q: '', topic: '', entity: '', keyword: '' };
+const EMPTY_FILTERS: Filters = { q: '', topic: '', entity: '', keyword: '', type: '' };
+
+function isMixedMarket(m: Market): boolean {
+  if (m.conditions) return m.conditions.length > 1;
+  return m.question.includes(' × ');
+}
 
 function timeUntil(iso: string | null): string {
   if (!iso) return '—';
@@ -58,6 +64,7 @@ function buildUrl(f: Filters, off: number): string {
   if (f.topic) p.set('topic', f.topic);
   if (f.entity) p.set('entity', f.entity);
   if (f.keyword) p.set('keyword', f.keyword);
+  if (f.type && f.type !== 'all') p.set('type', f.type);
   p.set('limit', String(LIMIT));
   p.set('offset', String(off));
   return `/api/markets?${p}`;
@@ -117,7 +124,7 @@ export default function MarketsPage() {
     load(EMPTY_FILTERS, 0, false);
   }
 
-  const activeFilters = (Object.entries(filters) as [FilterKey, string][]).filter(([, v]) => v);
+  const activeFilters = (Object.entries(filters) as [FilterKey, string][]).filter(([k, v]) => v && k !== 'type');
   const hasMore = markets.length < total && !loading;
 
   return (
@@ -155,6 +162,21 @@ export default function MarketsPage() {
               ✕
             </button>
           )}
+        </div>
+
+        <div className="ms-type-toggle">
+          {(['all', 'simple', 'mixed'] as const).map(t => {
+            const active = (filters.type === t) || (t === 'all' && !filters.type);
+            return (
+              <button
+                key={t}
+                className={`ms-type-btn${active ? (t === 'mixed' ? ' ms-type-btn--active-mixed' : ' ms-type-btn--active') : ''}`}
+                onClick={() => applyFilter('type', t === 'all' ? '' : t)}
+              >
+                {t === 'all' ? 'All' : t === 'simple' ? 'Simple' : 'Mixed'}
+              </button>
+            );
+          })}
         </div>
 
         {activeFilters.length > 0 && (
@@ -212,6 +234,7 @@ export default function MarketsPage() {
                 key={m.id}
                 market={m}
                 index={i}
+                mixed={isMixedMarket(m)}
                 onTagClick={applyFilter}
               />
             ))}
@@ -246,10 +269,12 @@ function LoadingDots() {
 function MarketCard({
   market,
   index,
+  mixed,
   onTagClick,
 }: {
   market: Market;
   index: number;
+  mixed: boolean;
   onTagClick: (key: FilterKey, val: string) => void;
 }) {
   const topics   = market.attention_topics   ?? [];
@@ -262,12 +287,13 @@ function MarketCard({
   return (
     <Link
       href={`/markets/${market.slug}`}
-      className="ms-card"
+      className={`ms-card${mixed ? ' ms-card--mixed' : ''}`}
       style={{ animationDelay: `${Math.min(index, 11) * 0.045}s` }}
     >
       <div className="ms-card__accent" />
 
       <div className="ms-card__body">
+        {mixed && <span className="ms-badge ms-badge--mixed">Mixed</span>}
         <h2 className="ms-card__question">{market.question}</h2>
 
         {market.description && (
