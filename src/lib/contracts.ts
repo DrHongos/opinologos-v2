@@ -279,6 +279,67 @@ export const FPMM_ABI = [
     outputs: [],
     stateMutability: 'nonpayable',
   },
+  {
+    name: 'setFeeParams',
+    type: 'function',
+    inputs: [
+      { name: '_baseFee', type: 'uint256' },
+      { name: '_minFee', type: 'uint256' },
+      { name: '_maxFee', type: 'uint256' },
+      { name: '_alpha', type: 'uint256' },
+      { name: '_beta', type: 'uint256' },
+      { name: '_volNeutral', type: 'uint256' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    name: 'reportPayouts',
+    type: 'function',
+    inputs: [
+      { name: 'questionId', type: 'bytes32' },
+      { name: 'payouts', type: 'uint256[]' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  { name: 'baseFee',    type: 'function', inputs: [], outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view' },
+  { name: 'minFee',     type: 'function', inputs: [], outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view' },
+  { name: 'maxFee',     type: 'function', inputs: [], outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view' },
+  { name: 'alpha',      type: 'function', inputs: [], outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view' },
+  { name: 'beta',       type: 'function', inputs: [], outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view' },
+  { name: 'volNeutral', type: 'function', inputs: [], outputs: [{ name: '', type: 'uint256' }], stateMutability: 'view' },
+  {
+    name: 'isResolved',
+    type: 'function',
+    inputs: [{ name: '_osIndex', type: 'bytes32' }],
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    name: 'redeem',
+    type: 'function',
+    inputs: [{ name: 'osIndex', type: 'bytes32' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    name: 'payoutNumerators',
+    type: 'function',
+    inputs: [
+      { name: 'conditionId', type: 'bytes32' },
+      { name: 'index', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    name: 'payoutDenominator',
+    type: 'function',
+    inputs: [{ name: 'conditionId', type: 'bytes32' }],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
 ] as const;
 
 // Backward-compat alias
