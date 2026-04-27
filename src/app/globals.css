@@ -1925,3 +1925,183 @@ a.ms-card:hover {
   color: #f87171;
   word-break: break-word;
 }
+
+/* ── Mix Markets Wizard (mmw__) ──────────────────────────────────────────── */
+
+.mmw__picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.mmw__search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid var(--border);
+  background: rgba(245, 245, 240, 0.025);
+  padding: 0.875rem 1.25rem;
+  transition: border-color 0.15s;
+}
+
+.mmw__search-wrap:focus-within {
+  border-color: var(--amber);
+}
+
+.mmw__search-prefix {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.9rem;
+  color: var(--amber);
+  letter-spacing: -0.05em;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.mmw__search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--paper);
+  font-family: var(--font-geist-sans), sans-serif;
+  font-size: 1rem;
+  caret-color: var(--amber);
+}
+
+.mmw__search-input::placeholder {
+  color: var(--muted);
+  opacity: 0.45;
+}
+
+.mmw__results {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+}
+
+.mmw__result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.mmw__result:last-child { border-bottom: none; }
+
+.mmw__result:hover { background: rgba(245, 245, 240, 0.04); }
+
+.mmw__result-q {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--paper);
+  line-height: 1.4;
+}
+
+.mmw__result-outcomes {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.mmw__no-results {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.72rem;
+  color: var(--muted);
+  opacity: 0.6;
+  padding: 0.5rem 0;
+  margin: 0;
+}
+
+/* Selected market card */
+.mmw__selected {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 1px solid rgba(245, 159, 11, 0.25);
+  background: rgba(245, 159, 11, 0.04);
+  padding: 0.875rem 1rem;
+}
+
+.mmw__selected-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mmw__selected-slot {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--amber);
+}
+
+.mmw__selected-clear {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.mmw__selected-clear:hover {
+  color: var(--paper);
+  border-color: rgba(245, 245, 240, 0.3);
+}
+
+.mmw__selected-q {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--paper);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.mmw__selected-outcomes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.mmw__selected-outcome {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--paper);
+  border: 1px solid var(--border);
+  padding: 0.2rem 0.4rem;
+  opacity: 0.7;
+}
+
+/* Pair display in step 3 */
+.mmw__pair {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mmw__pair-x {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 1.1rem;
+  color: var(--amber);
+  opacity: 0.55;
+  padding: 0.15rem 0;
+}

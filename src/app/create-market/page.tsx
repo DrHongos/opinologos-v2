@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { WalletButton } from '@/components/wallet-button';
 import { CreateMarketWizard } from '@/components/create-market-wizard';
+import { MixMarketsWizard } from '@/components/mix-markets-wizard';
 
 type Tab = 'new' | 'mixed';
 
@@ -42,15 +43,7 @@ export default function CreateMarketPage() {
 
       <main className="cm-content">
         {activeTab === 'new' && <CreateMarketWizard />}
-        {activeTab === 'mixed' && (
-          <div className="cm-placeholder">
-            <span className="cm-placeholder__icon">◈</span>
-            <p className="cm-placeholder__text">Mixed markets coming soon.</p>
-            <p className="cm-placeholder__sub">
-              Combine multiple prediction variables into a composite market.
-            </p>
-          </div>
-        )}
+        {activeTab === 'mixed' && <MixMarketsWizard />}
       </main>
     </div>
   );
