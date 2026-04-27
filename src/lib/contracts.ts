@@ -260,7 +260,7 @@ export const FPMM_ABI = [
     stateMutability: 'view',
   },
   {
-    name: 'splitPosition',
+    name: 'splitCollateral',
     type: 'function',
     inputs: [
       { name: 'osIndex', type: 'bytes32' },
@@ -270,10 +270,34 @@ export const FPMM_ABI = [
     stateMutability: 'nonpayable',
   },
   {
-    name: 'mergePositions',
+    name: 'mergeCollateral',
     type: 'function',
     inputs: [
       { name: 'osIndex', type: 'bytes32' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    name: 'splitPosition',
+    type: 'function',
+    inputs: [
+      { name: 'osIndex', type: 'bytes32' },
+      { name: 'parentLinearIdx', type: 'uint32' },
+      { name: 'condition', type: 'bytes32' },
+      { name: 'amount', type: 'uint256' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    name: 'mergePosition',
+    type: 'function',
+    inputs: [
+      { name: 'osIndex', type: 'bytes32' },
+      { name: 'parentLinearIdx', type: 'uint32' },
+      { name: 'condition', type: 'bytes32' },
       { name: 'amount', type: 'uint256' },
     ],
     outputs: [],

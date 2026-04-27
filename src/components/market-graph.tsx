@@ -20,6 +20,7 @@ import { getChain } from '@/lib/chain';
 import { FPMM_ABI, LMSR_HOOK_ADDRESS, computeImpliedPrice } from '@/lib/contracts';
 import { SwapPanel } from './swap-panel';
 import { ConditionPanel } from './condition-panel';
+import { SlotPanel, type SlotInfo } from './slot-panel';
 
 interface Outcome {
   outcomeIndex: number;
@@ -50,6 +51,7 @@ interface MarketData {
 interface RootNodeData extends Record<string, unknown> {
   question: string;
   description: string | null;
+  onOpen: () => void;
 }
 
 interface ConditionNodeData extends Record<string, unknown> {
@@ -67,6 +69,14 @@ interface QuestionNodeData extends Record<string, unknown> {
   onOpen: () => void;
 }
 
+interface CondOutcomeNodeData extends Record<string, unknown> {
+  label: string;
+  price: number | null;
+  conditionIndex: number;
+  slotIndex: number;
+  onOpen: () => void;
+}
+
 interface OutcomeNodeData extends Record<string, unknown> {
   outcome: Outcome;
   combinedLabel: string;
@@ -79,11 +89,12 @@ interface OutcomeNodeData extends Record<string, unknown> {
 function RootNode({ data }: NodeProps) {
   const d = data as RootNodeData;
   return (
-    <div className="mg-node mg-node--root">
+    <div className="mg-node mg-node--root" onClick={d.onOpen} role="button" tabIndex={0}>
       <Handle type="source" position={Position.Right} />
       <span className="mg-node__tag">Market</span>
       <p className="mg-node__question">{d.question}</p>
       {d.description && <p className="mg-node__desc">{d.description}</p>}
+      <span className="mg-node__hint">Click to fund / manage pool</span>
     </div>
   );
 }
@@ -117,6 +128,22 @@ function QuestionNode({ data }: NodeProps) {
   );
 }
 
+function CondOutcomeNode({ data }: NodeProps) {
+  const d = data as CondOutcomeNodeData;
+  return (
+    <div className="mg-node mg-node--cond-outcome" onClick={d.onOpen} role="button" tabIndex={0}>
+      <Handle type="target" position={Position.Left} />
+      <Handle type="source" position={Position.Right} />
+      <span className="mg-node__tag">Slot {d.slotIndex}</span>
+      <span className="mg-node__label">{d.label}</span>
+      {d.price !== null && (
+        <span className="mg-node__price">{d.price.toFixed(3)}</span>
+      )}
+      <span className="mg-node__hint">Click to trade / split</span>
+    </div>
+  );
+}
+
 function OutcomeNode({ data }: NodeProps) {
   const d = data as OutcomeNodeData;
   return (
@@ -136,26 +163,29 @@ const nodeTypes = {
   root: RootNode,
   condition: ConditionNode,
   question: QuestionNode,
+  condOutcome: CondOutcomeNode,
   outcome: OutcomeNode,
 };
 
 // ─── Dagre layout ──────────────────────────────────────────────────────────
 
-const ROOT_W  = 260; const ROOT_H  = 100;
+const ROOT_W  = 260; const ROOT_H  = 110;
 const COND_W  = 200; const COND_H  = 90;
 const QUEST_W = 240; const QUEST_H = 110;
+const COUT_W  = 160; const COUT_H  = 72;
 const OUT_W   = 180; const OUT_H   = 80;
 
 function nodeSize(type: string | undefined): [number, number] {
-  if (type === 'root')      return [ROOT_W, ROOT_H];
-  if (type === 'condition') return [COND_W, COND_H];
-  if (type === 'question')  return [QUEST_W, QUEST_H];
+  if (type === 'root')        return [ROOT_W, ROOT_H];
+  if (type === 'condition')   return [COND_W, COND_H];
+  if (type === 'question')    return [QUEST_W, QUEST_H];
+  if (type === 'condOutcome') return [COUT_W, COUT_H];
   return [OUT_W, OUT_H];
 }
 
 function layoutGraph(nodes: Node[], edges: Edge[]) {
   const g = new dagre.graphlib.Graph();
-  g.setGraph({ rankdir: 'LR', ranksep: 100, nodesep: 36 });
+  g.setGraph({ rankdir: 'LR', ranksep: 90, nodesep: 28 });
   g.setDefaultEdgeLabel(() => ({}));
 
   nodes.forEach(n => {
@@ -175,11 +205,17 @@ function layoutGraph(nodes: Node[], edges: Edge[]) {
 
 // ─── Graph builder ─────────────────────────────────────────────────────────
 
+// Sentinel used when clicking the root node to open pool management panel.
+// Empty id tells ConditionPanel to render in pool-management mode.
+export const POOL_SENTINEL: ConditionInfo = { id: '', slots: 0 };
+
 function buildGraph(
   market: MarketData,
   prices: number[] | null,
   onConditionClick: (c: ConditionInfo) => void,
   onOutcomeClick: (o: Outcome) => void,
+  onPoolOpen: () => void,
+  onSlotClick: (s: SlotInfo) => void,
 ): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = [];
   const edges: Edge[] = [];
@@ -188,83 +224,204 @@ function buildGraph(
     id: 'root',
     type: 'root',
     position: { x: 0, y: 0 },
-    data: { question: market.question, description: market.description } satisfies RootNodeData,
+    data: {
+      question: market.question,
+      description: market.description,
+      onOpen: onPoolOpen,
+    } satisfies RootNodeData,
     draggable: false,
   });
 
-  const isMixed = market.conditions.length > 1;
+  const isMixed = market.conditions.length === 2;
 
-  market.conditions.forEach((cond, ci) => {
-    const condId = `cond-${ci}`;
-    const useQuestion = isMixed && !!cond.question;
-    nodes.push({
-      id: condId,
-      type: useQuestion ? 'question' : 'condition',
-      position: { x: 0, y: 0 },
-      data: useQuestion
-        ? ({
-            conditionId: cond.id,
-            conditionIndex: ci,
-            slots: cond.slots,
-            question: cond.question!,
-            onOpen: () => onConditionClick(cond),
-          } satisfies QuestionNodeData)
-        : ({
-            conditionId: cond.id,
-            conditionIndex: ci,
-            slots: cond.slots,
-            onOpen: () => onConditionClick(cond),
-          } satisfies ConditionNodeData),
-      draggable: false,
-    });
-    edges.push({
-      id: `root-${condId}`,
-      source: 'root',
-      target: condId,
-      style: { stroke: 'rgba(245,245,240,0.25)', strokeWidth: 1.5 },
-    });
-  });
+  if (isMixed) {
+    // ── 4-level DAG: root → question → condOutcome → combined outcome ──────
+    const nA = market.conditions[0].slots;
+    const nB = market.conditions[1].slots;
 
-  market.outcomes.forEach(outcome => {
-    const outId = `out-${outcome.outcomeIndex}`;
-    const combinedLabel = outcome.label ?? buildCombinedLabel(outcome.outcomeIndex, market.conditions);
+    market.conditions.forEach((cond, ci) => {
+      const condNodeId = `cond-${ci}`;
+      const useQuestion = !!cond.question;
 
-    nodes.push({
-      id: outId,
-      type: 'outcome',
-      position: { x: 0, y: 0 },
-      data: {
-        outcome,
-        combinedLabel,
-        price: prices ? (prices[outcome.outcomeIndex] ?? null) : null,
-        onOpen: () => onOutcomeClick(outcome),
-      } satisfies OutcomeNodeData,
-      draggable: false,
-    });
-
-    // Connect each condition to this outcome
-    market.conditions.forEach((_, ci) => {
+      nodes.push({
+        id: condNodeId,
+        type: useQuestion ? 'question' : 'condition',
+        position: { x: 0, y: 0 },
+        data: useQuestion
+          ? ({
+              conditionId: cond.id,
+              conditionIndex: ci,
+              slots: cond.slots,
+              question: cond.question!,
+              onOpen: () => onConditionClick(cond),
+            } satisfies QuestionNodeData)
+          : ({
+              conditionId: cond.id,
+              conditionIndex: ci,
+              slots: cond.slots,
+              onOpen: () => onConditionClick(cond),
+            } satisfies ConditionNodeData),
+        draggable: false,
+      });
       edges.push({
-        id: `cond-${ci}-${outId}`,
-        source: `cond-${ci}`,
+        id: `root-${condNodeId}`,
+        source: 'root',
+        target: condNodeId,
+        style: { stroke: 'rgba(245,245,240,0.25)', strokeWidth: 1.5 },
+      });
+
+      // Individual condition outcome (slot) nodes
+      for (let slotIdx = 0; slotIdx < cond.slots; slotIdx++) {
+        const coId = `co-${ci}-${slotIdx}`;
+
+        let label: string;
+        let marginalPrice: number | null = null;
+
+        if (ci === 0) {
+          // Condition A: aIdx = slotIdx, any bIdx → pick first row's label part
+          label = market.outcomes[slotIdx * nB]?.label?.split(' × ')[0] ?? `Outcome ${slotIdx}`;
+          if (prices) {
+            marginalPrice = 0;
+            for (let b = 0; b < nB; b++) {
+              marginalPrice += prices[slotIdx * nB + b] ?? 0;
+            }
+          }
+        } else {
+          // Condition B: bIdx = slotIdx, any aIdx → pick first column's label part
+          label = market.outcomes[slotIdx]?.label?.split(' × ')[1] ?? `Outcome ${slotIdx}`;
+          if (prices) {
+            marginalPrice = 0;
+            for (let a = 0; a < nA; a++) {
+              marginalPrice += prices[a * nB + slotIdx] ?? 0;
+            }
+          }
+        }
+
+        const slotCombinedOutcomes = market.outcomes
+          .filter(o =>
+            ci === 0
+              ? Math.floor(o.outcomeIndex / nB) === slotIdx
+              : o.outcomeIndex % nB === slotIdx,
+          )
+          .map(o => ({
+            outcome: o,
+            combinedLabel: o.label ?? `${Math.floor(o.outcomeIndex / nB)} × ${o.outcomeIndex % nB}`,
+            price: prices ? (prices[o.outcomeIndex] ?? null) : null,
+          }));
+
+        const slotInfo: SlotInfo = {
+          label,
+          conditionIndex: ci,
+          slotIndex: slotIdx,
+          price: marginalPrice,
+          combinedOutcomes: slotCombinedOutcomes,
+        };
+
+        nodes.push({
+          id: coId,
+          type: 'condOutcome',
+          position: { x: 0, y: 0 },
+          data: {
+            label, price: marginalPrice, conditionIndex: ci, slotIndex: slotIdx,
+            onOpen: () => onSlotClick(slotInfo),
+          } satisfies CondOutcomeNodeData,
+          draggable: false,
+        });
+        edges.push({
+          id: `${condNodeId}-${coId}`,
+          source: condNodeId,
+          target: coId,
+          style: { stroke: 'rgba(245,245,240,0.18)', strokeWidth: 1 },
+        });
+      }
+    });
+
+    // Combined outcome leaf nodes — each gets 2 incoming edges
+    market.outcomes.forEach(outcome => {
+      const outId = `out-${outcome.outcomeIndex}`;
+      const aIdx = Math.floor(outcome.outcomeIndex / nB);
+      const bIdx = outcome.outcomeIndex % nB;
+      const combinedLabel = outcome.label ?? `${aIdx} × ${bIdx}`;
+
+      nodes.push({
+        id: outId,
+        type: 'outcome',
+        position: { x: 0, y: 0 },
+        data: {
+          outcome,
+          combinedLabel,
+          price: prices ? (prices[outcome.outcomeIndex] ?? null) : null,
+          onOpen: () => onOutcomeClick(outcome),
+        } satisfies OutcomeNodeData,
+        draggable: false,
+      });
+
+      edges.push({
+        id: `co-0-${aIdx}-${outId}`,
+        source: `co-0-${aIdx}`,
         target: outId,
-        style: { stroke: 'rgba(245,245,240,0.15)', strokeWidth: 1 },
+        style: { stroke: 'rgba(245,245,240,0.12)', strokeWidth: 1 },
+      });
+      edges.push({
+        id: `co-1-${bIdx}-${outId}`,
+        source: `co-1-${bIdx}`,
+        target: outId,
+        style: { stroke: 'rgba(245,245,240,0.12)', strokeWidth: 1 },
       });
     });
-  });
+  } else {
+    // ── Simple market: 3-level DAG (root → condition → outcomes) ────────────
+    market.conditions.forEach((cond, ci) => {
+      const condNodeId = `cond-${ci}`;
+      nodes.push({
+        id: condNodeId,
+        type: 'condition',
+        position: { x: 0, y: 0 },
+        data: {
+          conditionId: cond.id,
+          conditionIndex: ci,
+          slots: cond.slots,
+          onOpen: () => onConditionClick(cond),
+        } satisfies ConditionNodeData,
+        draggable: false,
+      });
+      edges.push({
+        id: `root-${condNodeId}`,
+        source: 'root',
+        target: condNodeId,
+        style: { stroke: 'rgba(245,245,240,0.25)', strokeWidth: 1.5 },
+      });
+    });
+
+    market.outcomes.forEach(outcome => {
+      const outId = `out-${outcome.outcomeIndex}`;
+      const combinedLabel = outcome.label ?? `Outcome ${outcome.outcomeIndex}`;
+
+      nodes.push({
+        id: outId,
+        type: 'outcome',
+        position: { x: 0, y: 0 },
+        data: {
+          outcome,
+          combinedLabel,
+          price: prices ? (prices[outcome.outcomeIndex] ?? null) : null,
+          onOpen: () => onOutcomeClick(outcome),
+        } satisfies OutcomeNodeData,
+        draggable: false,
+      });
+
+      market.conditions.forEach((_, ci) => {
+        edges.push({
+          id: `cond-${ci}-${outId}`,
+          source: `cond-${ci}`,
+          target: outId,
+          style: { stroke: 'rgba(245,245,240,0.15)', strokeWidth: 1 },
+        });
+      });
+    });
+  }
 
   return { nodes, edges };
-}
-
-function buildCombinedLabel(posIdx: number, conditions: ConditionInfo[]): string {
-  if (conditions.length === 1) return `Outcome ${posIdx}`;
-  const parts: string[] = [];
-  let remaining = posIdx;
-  for (const cond of conditions) {
-    parts.push(`C${cond.id.slice(2, 5)}:${remaining % cond.slots}`);
-    remaining = Math.floor(remaining / cond.slots);
-  }
-  return parts.join(' · ');
 }
 
 // ─── Main component ────────────────────────────────────────────────────────
@@ -272,6 +429,7 @@ function buildCombinedLabel(posIdx: number, conditions: ConditionInfo[]): string
 export function MarketGraph({ market }: { market: MarketData }) {
   const [activeCondition, setActiveCondition] = useState<ConditionInfo | null>(null);
   const [activeOutcome, setActiveOutcome] = useState<Outcome | null>(null);
+  const [activeSlot, setActiveSlot] = useState<SlotInfo | null>(null);
   const [prices, setPrices] = useState<number[] | null>(null);
 
   const fetchPrices = useCallback(() => {
@@ -292,9 +450,13 @@ export function MarketGraph({ market }: { market: MarketData }) {
 
   useEffect(() => { fetchPrices(); }, [fetchPrices]);
 
+  const openPoolPanel = useCallback(() => setActiveCondition(POOL_SENTINEL), []);
+
   const { rawNodes, rawEdges } = useMemo(
     () => {
-      const { nodes, edges } = buildGraph(market, prices, setActiveCondition, setActiveOutcome);
+      const { nodes, edges } = buildGraph(
+        market, prices, setActiveCondition, setActiveOutcome, openPoolPanel, setActiveSlot,
+      );
       return { rawNodes: nodes, rawEdges: edges };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -309,6 +471,7 @@ export function MarketGraph({ market }: { market: MarketData }) {
   const onClose = useCallback(() => {
     setActiveCondition(null);
     setActiveOutcome(null);
+    setActiveSlot(null);
   }, []);
 
   return (
@@ -328,8 +491,10 @@ export function MarketGraph({ market }: { market: MarketData }) {
         <Controls showInteractive={false} />
         <MiniMap
           nodeColor={n =>
-            n.type === 'root' ? '#f59e0b' :
-            n.type === 'condition' ? '#92400e' :
+            n.type === 'root'        ? '#f59e0b' :
+            n.type === 'question'    ? '#14b8a6' :
+            n.type === 'condition'   ? '#92400e' :
+            n.type === 'condOutcome' ? '#1e3a3a' :
             '#2a2a2a'
           }
           maskColor="rgba(13,13,13,0.7)"
@@ -340,6 +505,13 @@ export function MarketGraph({ market }: { market: MarketData }) {
         outcome={activeOutcome}
         osIndex={market.os_index}
         onClose={onClose}
+        onTxSuccess={fetchPrices}
+      />
+      <SlotPanel
+        slot={activeSlot}
+        osIndex={market.os_index}
+        onClose={onClose}
+        onTradeOutcome={(o) => { setActiveSlot(null); setActiveOutcome(o); }}
         onTxSuccess={fetchPrices}
       />
       <ConditionPanel

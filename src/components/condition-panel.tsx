@@ -38,6 +38,8 @@ function copyToClipboard(text: string) {
 
 export function ConditionPanel({ condition, osIndex, ptokenAddress, onClose, onTxSuccess }: ConditionPanelProps) {
   const isOpen = condition !== null;
+  // POOL_SENTINEL: id === '' means pool-management mode (opened from root node)
+  const isPoolMode = isOpen && condition!.id === '';
   const [tab, setTab] = useState<PanelTab>('add');
   const [amount, setAmount] = useState('');
   const [feesWithdrawable, setFeesWithdrawable] = useState<bigint | null>(null);
@@ -329,9 +331,9 @@ export function ConditionPanel({ condition, osIndex, ptokenAddress, onClose, onT
         <button className="mg-panel__close" onClick={onClose} aria-label="Close">✕</button>
 
         <div className="mg-panel__header">
-          <span className="mg-panel__tag">Condition</span>
-          <h2 className="mg-panel__title">Liquidity &amp; Fees</h2>
-          {condition && (
+          <span className="mg-panel__tag">{isPoolMode ? 'Pool' : 'Condition'}</span>
+          <h2 className="mg-panel__title">{isPoolMode ? 'Pool Management' : 'Liquidity & Fees'}</h2>
+          {condition && !isPoolMode && (
             <button
               className="mg-panel__mono mg-panel__mono--copy"
               onClick={() => copyToClipboard(condition.id)}
@@ -350,7 +352,7 @@ export function ConditionPanel({ condition, osIndex, ptokenAddress, onClose, onT
                 {loadingBal ? '…' : lpTotalSupply !== null ? parseFloat(formatUnits(lpTotalSupply, 18)).toLocaleString(undefined, { maximumFractionDigits: 4 }) : '—'}
               </span>
             </div>
-            {condition && (
+            {condition && !isPoolMode && (
               <div className="mg-stat" style={{ flex: 1 }}>
                 <span className="mg-stat__label">Outcome slots</span>
                 <span className="mg-stat__value">{condition.slots}</span>
@@ -408,7 +410,7 @@ export function ConditionPanel({ condition, osIndex, ptokenAddress, onClose, onT
             </button>
           </div>
 
-          {(tab === 'split' || tab === 'merge') && (
+          {(tab === 'split' || tab === 'merge') && !isPoolMode && (
             <p style={{ fontSize: '0.75rem', color: 'rgba(245,245,240,0.5)', margin: '0.25rem 0 0.5rem' }}>
               {tab === 'split'
                 ? `Split collateral → 1 of each outcome token (${condition?.slots ?? '?'} tokens per unit)`
