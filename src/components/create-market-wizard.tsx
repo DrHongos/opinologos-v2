@@ -9,14 +9,15 @@ import {
   keccak256,
   encodePacked,
   parseEventLogs,
+  parseUnits,
 } from 'viem';
 import {
   LMSR_HOOK_ADDRESS,
   COLLATERAL_TOKEN,
   ORACLE_ACCOUNT,
-  LMSR_B_DEFAULT,
   CT_ABI,
-  LMSR_ABI,
+  FPMM_ABI,
+  ERC20_ABI,
 } from '@/lib/contracts';
 import { getChain } from '@/lib/chain';
 
@@ -73,7 +74,7 @@ async function getClients(wallet: { address: string; getEthereumProvider: () => 
 
 // ── Step indicator ─────────────────────────────────────────────────────────────
 
-const STEP_LABELS = ['Generate', 'Upload', 'Prepare', 'Create OS', 'Publish'];
+const STEP_LABELS = ['Generate', 'Prepare', 'Create OS', 'Fund', 'Complete'];
 
 function StepIndicator({ current }: { current: number }) {
   return (
@@ -176,28 +177,27 @@ export function CreateMarketWizard() {
   // Step progression
   const [step, setStep] = useState(1);
 
-  // Step 1 — Generate
+  // Step 1 — Generate + auto-upload to IPFS
   const [question, setQuestion] = useState('');
   const [market, setMarket] = useState<GeneratedMarket | null>(null);
-
-  // Step 2 — Upload
   const [questionCid, setQuestionCid] = useState('');
   const [questionId, setQuestionId] = useState<Hash | null>(null);
 
-  // Step 3 — Prepare condition
+  // Step 2 — Prepare condition
   const [prepareTxHash, setPrepareTxHash] = useState('');
   const [conditionId, setConditionId] = useState<Hash | null>(null);
 
-  // Step 4 — Create OS
+  // Step 3 — Create OS + auto-publish
   const [createOsTxHash, setCreateOsTxHash] = useState('');
   const [osIndex, setOsIndex] = useState<Hash | null>(null);
-  const [sharesToken, setSharesToken] = useState('');
-  const [positions, setPositions] = useState<readonly bigint[]>([]);
-  const [predictionTokens, setPredictionTokens] = useState<Hash[]>([]);
-
-  // Step 5 — Publish
+  const [outcomeTokenIds, setOutcomeTokenIds] = useState<bigint[]>([]);
+  const [initialWeights, setInitialWeights] = useState<number[]>([]);
   const [finalCid, setFinalCid] = useState('');
   const [ensSlug, setEnsSlug] = useState('');
+
+  // Step 4 — Fund
+  const [fundAmount, setFundAmount] = useState('');
+  const [fundTxHash, setFundTxHash] = useState('');
 
   // UI
   const [loading, setLoading] = useState(false);
@@ -209,42 +209,33 @@ export function CreateMarketWizard() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/generate-market', {
+      const genRes = await fetch('/api/generate-market', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question }),
       });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Generation failed');
-      setMarket(data.market as GeneratedMarket);
-      setStep(2);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unknown error');
-    } finally {
-      setLoading(false);
-    }
-  }
+      const genData = await genRes.json();
+      if (!genRes.ok || genData.error) throw new Error(genData.error ?? 'Generation failed');
+      const m = genData.market as GeneratedMarket;
+      setMarket(m);
+      setInitialWeights(m.outcomes.map(() => 1));
 
-  async function handleUpload() {
-    if (!market) return;
-    setLoading(true);
-    setError('');
-    try {
-      const res = await fetch('/api/upload-market', {
+      // Auto-pin to IPFS immediately after generation
+      const upRes = await fetch('/api/upload-market', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: market, name: `market-${market.id}.json` }),
+        body: JSON.stringify({ data: m, name: `market-${m.id}.json` }),
       });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Upload failed');
+      const upData = await upRes.json();
+      if (!upRes.ok || upData.error) throw new Error(upData.error ?? 'IPFS upload failed');
 
-      const cid = data.cid as string;
+      const cid = upData.cid as string;
       setQuestionCid(cid);
-
-      // questionId = keccak256 of CID UTF-8 bytes — oracle must use same encoding for reportPayouts
+      // questionId = keccak256 of CID UTF-8 bytes — oracle uses same encoding for reportPayouts
       const qId = keccak256(new TextEncoder().encode(cid));
       setQuestionId(qId);
-      setStep(3);
+
+      setStep(2);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unknown error');
     } finally {
@@ -279,7 +270,7 @@ export function CreateMarketWizard() {
         ),
       );
       setConditionId(cId);
-      setStep(4);
+      setStep(3);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Transaction failed');
     } finally {
@@ -288,7 +279,7 @@ export function CreateMarketWizard() {
   }
 
   async function handleCreateOS() {
-    if (!wallet || !conditionId) return;
+    if (!wallet || !conditionId || !market) return;
     setLoading(true);
     setError('');
     setCreateOsTxHash('');
@@ -297,92 +288,65 @@ export function CreateMarketWizard() {
 
       const hash = await walletClient.writeContract({
         address: LMSR_HOOK_ADDRESS,
-        abi: LMSR_ABI,
-        functionName: 'createOS',
-        args: [COLLATERAL_TOKEN, [conditionId], LMSR_B_DEFAULT],
+        abi: FPMM_ABI,
+        functionName: 'createOutcomeSpace',
+        args: [COLLATERAL_TOKEN, [conditionId], initialWeights.map(BigInt)],
       });
       setCreateOsTxHash(hash);
 
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
-      // Decode OSCreated event
-      const osLogs = parseEventLogs({ abi: LMSR_ABI, eventName: 'OSCreated', logs: receipt.logs });
+      const osLogs = parseEventLogs({ abi: FPMM_ABI, eventName: 'OSCreated', logs: receipt.logs });
       if (!osLogs.length) throw new Error('OSCreated event not found in receipt');
 
-      const { osIndex: osIdx, shares } = osLogs[0].args;
+      const { osIndex: osIdx } = osLogs[0].args;
       setOsIndex(osIdx as Hash);
-      setSharesToken(shares as string);
 
-      // Read all position IDs from pool
-      const [posIds] = await publicClient.readContract({
-        address: LMSR_HOOK_ADDRESS,
-        abi: LMSR_ABI,
-        functionName: 'getPoolBalances',
-        args: [osIdx as Hash],
-      });
-      setPositions(posIds);
-
-      // Resolve each positionId → PredictionToken address
-      const ptAddrs = await Promise.all(
-        posIds.map((posId) =>
+      // Read ERC-6909 token IDs for each outcome (linear index 0..N-1)
+      const tokenIds = (await Promise.all(
+        Array.from({ length: market.outcomes.length }, (_, i) =>
           publicClient.readContract({
             address: LMSR_HOOK_ADDRESS,
-            abi: LMSR_ABI,
-            functionName: 'prediction_tokens',
-            args: [posId],
+            abi: FPMM_ABI,
+            functionName: 'outcomeTokenId',
+            args: [osIdx as Hash, i],
           }),
         ),
-      );
-      setPredictionTokens(ptAddrs as Hash[]);
-      setStep(5);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Transaction failed');
-    } finally {
-      setLoading(false);
-    }
-  }
+      )) as bigint[];
+      setOutcomeTokenIds(tokenIds);
 
-  async function handlePublish() {
-    if (!market || !conditionId || !osIndex) return;
-    setLoading(true);
-    setError('');
-    try {
+      // Auto-publish: build complete market JSON and pin to IPFS
+      const outcomeMarkets = market.outcomes.map((o, i) => ({
+        outcomeIndex: i,
+        label: o.label,
+        erc6909Id: tokenIds[i] !== undefined
+          ? ('0x' + tokenIds[i].toString(16).padStart(64, '0'))
+          : null,
+      }));
+
       const finalMarket = {
         ...market,
-        markets: market.outcomes.map((o, i) => ({
-          outcomeIndex: i,
-          label: o.label,
-          positionId: positions[i] !== undefined
-            ? ('0x' + positions[i].toString(16).padStart(64, '0'))
-            : null,
-          predictionToken: predictionTokens[i] ?? null,
-        })),
+        markets: outcomeMarkets,
         probabilityModel: {
-          type: 'lmsr',
-          b: LMSR_B_DEFAULT.toString(),
-          osIndex,
-          sharesToken,
+          type: 'fpmm',
+          osIndex: osIdx,
           conditionId,
           collateral: COLLATERAL_TOKEN,
           hook: LMSR_HOOK_ADDRESS,
         },
-        ipfs: {
-          questionCid,
-          marketCid: null, // filled after upload (circular reference)
-        },
+        ipfs: { questionCid, marketCid: null },
       };
 
-      const res = await fetch('/api/upload-market', {
+      const uploadRes = await fetch('/api/upload-market', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ data: finalMarket, name: `market-complete-${market.id}.json` }),
       });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error ?? 'Upload failed');
-      const cid = data.cid as string;
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok || uploadData.error) throw new Error(uploadData.error ?? 'Upload failed');
+      const cid = uploadData.cid as string;
       setFinalCid(cid);
 
-      // Register in DB for ENS gateway resolution
       const regRes = await fetch('/api/markets/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -391,28 +355,80 @@ export function CreateMarketWizard() {
           question: market.question,
           questionCid,
           marketCid: cid,
-          osIndex,
-          sharesToken,
+          osIndex: osIdx,
           conditionId,
-          predTokens: predictionTokens,
-          // enriched fields for indexing
           description: market.description,
           endTime: market.endTime,
           oracle: market.oracle,
           collateral: COLLATERAL_TOKEN,
           hookAddress: LMSR_HOOK_ADDRESS,
-          lmsrB: LMSR_B_DEFAULT.toString(),
           resolution: market.resolution,
           attention: market.attention,
-          outcomes: finalMarket.markets,
+          outcomes: outcomeMarkets,
         }),
       });
       if (regRes.ok) {
         const { slug } = await regRes.json();
         setEnsSlug(slug as string);
       }
+
+      setStep(4);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unknown error');
+      setError(e instanceof Error ? e.message : 'Transaction failed');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleFund() {
+    if (!wallet || !osIndex) return;
+    setLoading(true);
+    setError('');
+    setFundTxHash('');
+    try {
+      const { walletClient, publicClient } = await getClients(wallet);
+      const amountWad = parseUnits(fundAmount, 18);
+
+      // i think this is very wrong, liquidity must be handled by the hook
+      // Approve the PoolManager to pull collateral on behalf of the user
+      //const pmAddress = await publicClient.readContract({
+      //  address: LMSR_HOOK_ADDRESS,
+      //  abi: FPMM_ABI,
+      //  functionName: 'poolManager',
+      //}) as Hash;
+
+      const pmAddress = LMSR_HOOK_ADDRESS
+
+      const allowance = await publicClient.readContract({
+        address: COLLATERAL_TOKEN,
+        abi: ERC20_ABI,
+        functionName: 'allowance',
+        args: [wallet.address as Hash, pmAddress],
+      }) as bigint;
+      //console.log(allowance)
+      if (allowance < amountWad) {
+        const approveTx = await walletClient.writeContract({
+          address: COLLATERAL_TOKEN,
+          abi: ERC20_ABI,
+          functionName: 'approve',
+          args: [pmAddress, amountWad],
+        });
+        await publicClient.waitForTransactionReceipt({ hash: approveTx });
+      }
+
+      const hash = await walletClient.writeContract({
+        address: LMSR_HOOK_ADDRESS,
+        abi: FPMM_ABI,
+        functionName: 'addLiquidity',
+        args: [osIndex, amountWad],
+        gas: 2_000_000n,
+      });
+      setFundTxHash(hash);
+      await publicClient.waitForTransactionReceipt({ hash });
+
+      setStep(5);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Transaction failed');
     } finally {
       setLoading(false);
     }
@@ -432,12 +448,12 @@ export function CreateMarketWizard() {
         </div>
       )}
 
-      {/* Step 1 — Generate */}
+      {/* Step 1 — Generate + auto-upload */}
       {step === 1 && (
         <div className="cmw__body">
           <h2 className="cmw__step-title">Describe your market</h2>
           <p className="cmw__step-sub">
-            Grok will compile it into a machine-readable schema with discrete outcomes and a resolution rule.
+            Grok will compile it into a machine-readable schema with discrete outcomes and a resolution rule, then pin it to IPFS automatically.
           </p>
           <textarea
             className="cmf__textarea"
@@ -452,35 +468,8 @@ export function CreateMarketWizard() {
         </div>
       )}
 
-      {/* Step 2 — Upload metadata to IPFS */}
-      {step === 2 && market && (
-        <div className="cmw__body">
-          <h2 className="cmw__step-title">Upload metadata</h2>
-          <p className="cmw__step-sub">
-            This file will be pinned to IPFS. Its CID becomes the <code>questionId</code> for the on-chain condition.
-          </p>
-
-          <div className="cmw__info-grid">
-            <Field label="Question" value={market.question} mono={false} />
-            <Field label="Outcomes" value={market.outcomes.map((o) => o.label).join(' · ')} mono={false} />
-            <Field label="Oracle" value={ORACLE_ACCOUNT || '(NEXT_PUBLIC_ORACLE_ACCOUNT not set)'} />
-            <Field label="Resolution source" value={market.resolution.source} mono={false} />
-          </div>
-
-          <div className="cmw__json-preview">
-            <div className="cmw__json-header">
-              <span className="cmw__result-label">Preview</span>
-            </div>
-            <pre className="cmf__code">{JSON.stringify(market, null, 2)}</pre>
-          </div>
-
-          {error && <ErrorBanner msg={error} />}
-          <ActionBar label="Pin to IPFS" onClick={handleUpload} loading={loading} />
-        </div>
-      )}
-
-      {/* Step 3 — prepareCondition */}
-      {step === 3 && market && questionId && (
+      {/* Step 2 — prepareCondition */}
+      {step === 2 && market && questionId && (
         <div className="cmw__body">
           <h2 className="cmw__step-title">Prepare condition</h2>
           <p className="cmw__step-sub">
@@ -492,6 +481,8 @@ export function CreateMarketWizard() {
             <Field label="questionId (bytes32)" value={questionId} />
             <Field label="oracle" value={ORACLE_ACCOUNT} />
             <Field label="outcomeSlotCount" value={String(market.outcomes.length)} />
+            {/* responses think its 2024... FIX IT */}
+            <Field label="endTime" value={new Date(market.endTime * 1000).toLocaleDateString()} />
             <Field label="contract" value={LMSR_HOOK_ADDRESS} />
             <Field label="chain" value={`${chain.name} (${chain.id})`} mono={false} />
           </div>
@@ -507,25 +498,55 @@ export function CreateMarketWizard() {
         </div>
       )}
 
-      {/* Step 4 — createOS */}
-      {step === 4 && conditionId && (
+      {/* Step 3 — createOutcomeSpace + auto-publish */}
+      {step === 3 && conditionId && market && (
         <div className="cmw__body">
           <h2 className="cmw__step-title">Create outcome space</h2>
           <p className="cmw__step-sub">
-            Deploys one PredictionToken per outcome, initialises Uniswap v4 pools, and mints LP shares.
+            Set initial liquidity weights to seed the FPMM pool&apos;s starting probabilities. Weights are proportional — a 3:1 ratio gives 75% / 25%. After the transaction confirms, the complete market JSON is pinned to IPFS and registered automatically.
           </p>
 
           <div className="cmw__info-grid">
             <Field label="conditionId" value={conditionId} />
             <Field label="collateral" value={COLLATERAL_TOKEN} />
-            <Field label="b (LMSR param)" value={`${LMSR_B_DEFAULT.toString()} (1000 WAD)`} />
             <Field label="contract" value={LMSR_HOOK_ADDRESS} />
           </div>
+
+          {(() => {
+            const total = initialWeights.reduce((s, w) => s + w, 0) || 1;
+            return (
+              <div className="cmw__outcomes">
+                {market.outcomes.map((o, i) => {
+                  const pct = ((initialWeights[i] ?? 1) / total * 100).toFixed(1);
+                  return (
+                    <div key={i} className="cmw__outcome">
+                      <span className="cmw__outcome-label">{o.label}</span>
+                      <div className="cmw__weight-row">
+                        <input
+                          className="cmw__weight-input"
+                          type="number"
+                          min={1}
+                          step={1}
+                          value={initialWeights[i] ?? 1}
+                          disabled={loading}
+                          onChange={e => {
+                            const v = Math.max(1, Math.round(Number(e.target.value) || 1));
+                            setInitialWeights(ws => ws.map((w, j) => j === i ? v : w));
+                          }}
+                        />
+                        <span className="cmw__weight-pct">{pct}%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {createOsTxHash && <TxField label="Tx" hash={createOsTxHash} chain={chain} />}
           {error && <ErrorBanner msg={error} />}
           <ActionBar
-            label="Call createOS"
+            label="Call createOutcomeSpace"
             onClick={handleCreateOS}
             loading={loading}
             disabled={!wallet}
@@ -533,61 +554,96 @@ export function CreateMarketWizard() {
         </div>
       )}
 
-      {/* Step 5 — Complete JSON and publish */}
-      {step === 5 && market && osIndex && (
+      {/* Step 4 — Fund */}
+      {step === 4 && osIndex && market && (
         <div className="cmw__body">
-          <h2 className="cmw__step-title">Publish complete market file</h2>
+          <h2 className="cmw__step-title">Fund the market</h2>
           <p className="cmw__step-sub">
-            On-chain addresses have been resolved. Uploading the final agent-readable JSON to IPFS.
+            Add initial collateral liquidity to the FPMM pool. The collateral is split proportionally across outcomes according to your chosen weights.
           </p>
 
           <div className="cmw__info-grid">
             <Field label="osIndex" value={osIndex} />
-            <Field label="sharesToken" value={sharesToken} />
-            <Field label="conditionId" value={conditionId!} />
+            <Field label="collateral" value={COLLATERAL_TOKEN} />
           </div>
 
           <div className="cmw__outcomes">
-            {market.outcomes.map((o, i) => (
-              <div key={i} className="cmw__outcome">
-                <span className="cmw__outcome-label">{o.label}</span>
-                <span className="cmw__outcome-addr">
-                  {predictionTokens[i] ? trunc(predictionTokens[i], 10, 8) : '—'}
-                </span>
-              </div>
-            ))}
+            {(() => {
+              const total = initialWeights.reduce((s, w) => s + w, 0) || 1;
+              return market.outcomes.map((o, i) => (
+                <div key={i} className="cmw__outcome">
+                  <span className="cmw__outcome-label">{o.label}</span>
+                  <span className="cmw__weight-pct">
+                    {((initialWeights[i] ?? 1) / total * 100).toFixed(1)}%
+                  </span>
+                </div>
+              ));
+            })()}
           </div>
 
-          {!finalCid ? (
-            <>
-              {error && <ErrorBanner msg={error} />}
-              <ActionBar label="Publish to IPFS" onClick={handlePublish} loading={loading} />
-            </>
-          ) : (
-            <div className="cmw__success">
-              <div className="cmw__success-row">
-                <span className="cmw__result-dot" />
-                <span className="cmw__success-label">Market published</span>
-              </div>
-              <div className="cmw__info-grid">
-                <Field label="Question CID" value={questionCid} />
-                <Field label="Market CID" value={finalCid} />
-                {ensSlug && (
-                  <Field label="ENS name" value={`${ensSlug}.opinologos.eth`} mono={false} />
-                )}
-                {sharesToken && (
-                  <Field label="Alt ENS name" value={`${sharesToken}.opinologos.eth`} />
-                )}
-              </div>
-              <p className="cmw__success-note">
-                Share the market CID with agents and front-ends. The oracle uses{' '}
-                <code>keccak256(cidBytes)</code> as <code>questionId</code> for{' '}
-                <code>reportPayouts</code>. Resolve market files via{' '}
-                <code>*.opinologos.eth</code> (CCIP-Read gateway at{' '}
-                <code>/api/ens/</code>).
-              </p>
+          <div className="cmw__fund-row">
+            <label className="cmw__field-label">Collateral amount (18 decimals)</label>
+            <input
+              className="cmw__fund-input"
+              type="number"
+              min="0"
+              step="any"
+              placeholder="e.g. 100"
+              value={fundAmount}
+              disabled={loading}
+              onChange={e => setFundAmount(e.target.value)}
+            />
+          </div>
+
+          {fundTxHash && <TxField label="Tx" hash={fundTxHash} chain={chain} />}
+          {error && <ErrorBanner msg={error} />}
+          <ActionBar
+            label="Add liquidity"
+            onClick={handleFund}
+            loading={loading}
+            disabled={!wallet || !fundAmount || Number(fundAmount) <= 0}
+          />
+        </div>
+      )}
+
+      {/* Step 5 — Complete */}
+      {step === 5 && market && osIndex && (
+        <div className="cmw__body">
+          <div className="cmw__success">
+            <div className="cmw__success-row">
+              <span className="cmw__result-dot" />
+              <span className="cmw__success-label">Market live</span>
             </div>
-          )}
+
+            <div className="cmw__info-grid">
+              <Field label="osIndex" value={osIndex} />
+              <Field label="conditionId" value={conditionId!} />
+              <Field label="Question CID" value={questionCid} />
+              {finalCid && <Field label="Market CID" value={finalCid} />}
+              {ensSlug && (
+                <Field label="ENS name" value={`${ensSlug}.opinologos.eth`} mono={false} />
+              )}
+            </div>
+
+            <div className="cmw__outcomes">
+              {market.outcomes.map((o, i) => (
+                <div key={i} className="cmw__outcome">
+                  <span className="cmw__outcome-label">{o.label}</span>
+                  <span className="cmw__outcome-addr">
+                    {outcomeTokenIds[i] !== undefined
+                      ? trunc('0x' + outcomeTokenIds[i].toString(16).padStart(64, '0'), 10, 8)
+                      : '—'}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <p className="cmw__success-note">
+              Share the market CID with agents and front-ends. The oracle uses{' '}
+              <code>keccak256(cidBytes)</code> as <code>questionId</code> for{' '}
+              <code>reportPayouts</code>. Resolve via <code>*.opinologos.eth</code>.
+            </p>
+          </div>
         </div>
       )}
     </div>

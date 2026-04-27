@@ -12,6 +12,8 @@
     "@dagrejs/dagre": "^3.0.0",
     "@privy-io/react-auth": "^3.22.2",
     "@types/dagre": "^0.7.54",
+    "@uniswap/universal-router-sdk": "^5.1.0",
+    "@uniswap/v4-sdk": "^2.0.0",
     "@vercel/postgres": "^0.10.0",
     "@xyflow/react": "^12.10.2",
     "next": "16.2.4",

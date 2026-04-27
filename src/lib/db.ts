@@ -11,7 +11,7 @@ export async function initSchema() {
       question_cid        TEXT NOT NULL,
       market_cid          TEXT NOT NULL,
       os_index            TEXT NOT NULL,
-      shares_token        TEXT NOT NULL,
+      shares_token        TEXT,
       condition_id        TEXT NOT NULL,
       created_at          TIMESTAMPTZ DEFAULT NOW(),
       description         TEXT,
@@ -33,6 +33,9 @@ export async function initSchema() {
 
   // Migrate existing installs — no-ops on fresh schema
   const newCols = [
+    // Drop NOT NULL constraints that break FPMM markets (no shares token / no ERC-20 per outcome)
+    `ALTER TABLE markets ALTER COLUMN shares_token DROP NOT NULL`,
+    `ALTER TABLE market_tokens ALTER COLUMN token_address DROP NOT NULL`,
     `ALTER TABLE markets ADD COLUMN IF NOT EXISTS conditions JSONB`,
     `ALTER TABLE markets ADD COLUMN IF NOT EXISTS description TEXT`,
     `ALTER TABLE markets ADD COLUMN IF NOT EXISTS end_time TIMESTAMPTZ`,
@@ -64,7 +67,7 @@ export async function initSchema() {
   await sql`
     CREATE TABLE IF NOT EXISTS market_tokens (
       market_id     TEXT NOT NULL REFERENCES markets(id) ON DELETE CASCADE,
-      token_address TEXT NOT NULL,
+      token_address TEXT,
       outcome_index INTEGER NOT NULL,
       label         TEXT,
       position_id   TEXT,

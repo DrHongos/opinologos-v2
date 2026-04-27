@@ -770,6 +770,72 @@ body {
   letter-spacing: 0.04em;
 }
 
+.cmw__weight-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cmw__weight-input {
+  width: 4.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--paper);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.8rem;
+  padding: 0.2rem 0.4rem;
+  text-align: right;
+  appearance: textfield;
+}
+
+.cmw__weight-input::-webkit-inner-spin-button,
+.cmw__weight-input::-webkit-outer-spin-button { opacity: 1; }
+
+.cmw__weight-input:focus {
+  outline: none;
+  border-color: var(--amber);
+}
+
+.cmw__weight-input:disabled {
+  opacity: 0.4;
+}
+
+.cmw__weight-pct {
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.75rem;
+  color: var(--muted);
+  min-width: 3.5rem;
+  text-align: right;
+}
+
+.cmw__fund-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 1rem;
+}
+
+.cmw__fund-input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--paper);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.9rem;
+  padding: 0.5rem 0.75rem;
+  width: 100%;
+  appearance: textfield;
+}
+
+.cmw__fund-input::-webkit-inner-spin-button,
+.cmw__fund-input::-webkit-outer-spin-button { opacity: 1; }
+
+.cmw__fund-input:focus {
+  outline: none;
+  border-color: var(--amber);
+}
+
+.cmw__fund-input:disabled { opacity: 0.4; }
+
 /* Success state */
 .cmw__success {
   display: flex;
@@ -1479,6 +1545,35 @@ a.ms-card:hover {
   margin: 0;
 }
 
+.md-cid-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+}
+
+.md-cid-row__link {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-decoration: none;
+  word-break: break-all;
+}
+.md-cid-row__link:hover { color: var(--fg); text-decoration: underline; }
+
+.md-cid-row__copy {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 1px 6px;
+  line-height: 1.6;
+}
+.md-cid-row__copy:hover { color: var(--fg); border-color: var(--fg); }
+
 .md-graph-wrap {
   flex: 1;
   display: flex;
@@ -1493,7 +1588,8 @@ a.ms-card:hover {
 
 .mg-canvas {
   width: 100%;
-  height: 100%;
+  height: calc(100vh - 200px);
+  min-height: 400px;
   position: relative;
 }
 
@@ -1603,6 +1699,13 @@ a.ms-card:hover {
   color: var(--muted);
   margin-top: 0.2rem;
   opacity: 0.7;
+}
+
+.mg-node__price {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--amber);
+  margin-top: 0.15rem;
 }
 
 /* React Flow handle overrides */
@@ -1814,4 +1917,11 @@ a.ms-card:hover {
 .mg-panel__action:disabled {
   opacity: 0.35;
   cursor: not-allowed;
+}
+
+.mg-panel__error {
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+  color: #f87171;
+  word-break: break-word;
 }

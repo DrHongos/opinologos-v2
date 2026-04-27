@@ -24,9 +24,10 @@ function slugify(text: string): string {
 
 interface Outcome {
   outcomeIndex: number;
-  label: string;
-  positionId: string | null;
-  predictionToken: string | null;
+  label: string | null;
+  positionId?: string | null;
+  erc6909Id?: string | null;       // FPMM: ERC-6909 token ID on hook
+  predictionToken?: string | null; // legacy: separate ERC-20 address
 }
 
 export async function POST(req: NextRequest) {
@@ -36,9 +37,9 @@ export async function POST(req: NextRequest) {
     questionCid,
     marketCid,
     osIndex,
-    sharesToken,
+    sharesToken,   // optional — absent for FPMM markets
     conditionId,
-    predTokens,
+    predTokens,    // optional — absent for FPMM markets
     // enriched fields
     description,
     endTime,
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
     await ensureSchema();
 
     const slug = slugify(question);
-    const sharesLow = (sharesToken as string).toLowerCase();
+    const sharesLow = sharesToken ? (sharesToken as string).toLowerCase() : null;
     const endTimestamp = endTime ? new Date(endTime * 1000).toISOString() : null;
 
     await sql`
@@ -101,19 +102,20 @@ export async function POST(req: NextRequest) {
         search_vector       = EXCLUDED.search_vector
     `;
 
-    // Prefer structured outcomes array (with labels/positionIds); fall back to predTokens
-    const outcomeRows: Outcome[] = outcomes ?? (predTokens as string[]).map((t: string, i: number) => ({
+    // Prefer structured outcomes array; fall back to legacy predTokens list
+    const outcomeRows: Outcome[] = outcomes ?? (Array.isArray(predTokens) ? predTokens.map((t: string, i: number) => ({
       outcomeIndex: i,
       label: null,
-      positionId: null,
       predictionToken: t,
-    }));
+    })) : []);
 
     for (const o of outcomeRows) {
-      const addr = (o.predictionToken ?? '').toLowerCase();
+      // FPMM markets: erc6909Id is the position identifier; no separate ERC-20 token address
+      const posId = o.erc6909Id ?? o.positionId ?? null;
+      const addr = o.predictionToken ? (o.predictionToken as string).toLowerCase() : null;
       await sql`
         INSERT INTO market_tokens (market_id, token_address, outcome_index, label, position_id)
-        VALUES (${id}, ${addr}, ${o.outcomeIndex}, ${o.label ?? null}, ${o.positionId ?? null})
+        VALUES (${id}, ${addr}, ${o.outcomeIndex}, ${o.label ?? null}, ${posId})
         ON CONFLICT (market_id, outcome_index) DO UPDATE SET
           token_address = EXCLUDED.token_address,
           label         = EXCLUDED.label,

@@ -20,11 +20,13 @@ ${question}
 
 Requirements:
 
-1. Define a single variable (or explicitly multiple if unavoidable).
-2. Provide discrete, enumerable outcomes, max 4. Each outcome must have "id" (integer starting at 0), "label" (short string), and "description".
+1. Define minimum amount of variables.
+2. Provide discrete, enumerable outcomes, max 6. Each outcome must have "id" (integer starting at 0), "label" (short string), and "description".
 3. Define a deterministic resolution rule (who/what decides outcome).
 4. Include time constraints if applicable (Unix timestamps in seconds).
 5. Generate an attention profile to capture relevant real-world signals.
+6. Reject "death markets" and other harmful predictions:
+7. For queries about time-sensitive events (e.g., sports like Formula 1), provide specific details such as event name, location, date, and confirmed participants (e.g., drivers or teams). 
 
 Attention profile must include:
 - entities: concrete actors (teams, people, organizations, shows, assets)
@@ -77,6 +79,8 @@ export async function POST(request: NextRequest) {
     return Response.json({ error: 'Question is required' }, { status: 400 });
   }
 
+// REST request deprecated live search
+// TODO: migrate to sdk
   const grokResponse = await fetch('https://api.x.ai/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -84,12 +88,23 @@ export async function POST(request: NextRequest) {
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'grok-3-mini',
+      //model: 'grok-3-mini',   // too dumb
+      model: 'grok-4-1-fast-non-reasoning',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: buildUserPrompt(question) },
       ],
-      temperature: 0.2,
+      //temperature: 0.2,
+      tools: [
+        { 
+          type: "live_search",
+          sources: [
+            { type: "web" },
+            { type: "x" }
+          ]
+        },
+      ],
+      tool_choice: "auto",
     }),
   });
 

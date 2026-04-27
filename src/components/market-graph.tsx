@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import {
   ReactFlow,
   Background,
@@ -15,6 +15,9 @@ import {
 } from '@xyflow/react';
 import dagre from '@dagrejs/dagre';
 import '@xyflow/react/dist/style.css';
+import { createPublicClient, http } from 'viem';
+import { getChain } from '@/lib/chain';
+import { FPMM_ABI, LMSR_HOOK_ADDRESS, computeImpliedPrice } from '@/lib/contracts';
 import { SwapPanel } from './swap-panel';
 import { ConditionPanel } from './condition-panel';
 
@@ -58,6 +61,7 @@ interface ConditionNodeData extends Record<string, unknown> {
 interface OutcomeNodeData extends Record<string, unknown> {
   outcome: Outcome;
   combinedLabel: string;
+  price: number | null;
   onOpen: () => void;
 }
 
@@ -96,6 +100,9 @@ function OutcomeNode({ data }: NodeProps) {
       <Handle type="target" position={Position.Left} />
       <span className="mg-node__tag">Position {d.outcome.outcomeIndex}</span>
       <span className="mg-node__label">{d.combinedLabel}</span>
+      {d.price !== null && (
+        <span className="mg-node__price">{d.price.toFixed(4)} col</span>
+      )}
       <span className="mg-node__hint">Click to trade</span>
     </div>
   );
@@ -143,6 +150,7 @@ function layoutGraph(nodes: Node[], edges: Edge[]) {
 
 function buildGraph(
   market: MarketData,
+  prices: number[] | null,
   onConditionClick: (c: ConditionInfo) => void,
   onOutcomeClick: (o: Outcome) => void,
 ): { nodes: Node[]; edges: Edge[] } {
@@ -190,6 +198,7 @@ function buildGraph(
       data: {
         outcome,
         combinedLabel,
+        price: prices ? (prices[outcome.outcomeIndex] ?? null) : null,
         onOpen: () => onOutcomeClick(outcome),
       } satisfies OutcomeNodeData,
       draggable: false,
@@ -225,14 +234,33 @@ function buildCombinedLabel(posIdx: number, conditions: ConditionInfo[]): string
 export function MarketGraph({ market }: { market: MarketData }) {
   const [activeCondition, setActiveCondition] = useState<ConditionInfo | null>(null);
   const [activeOutcome, setActiveOutcome] = useState<Outcome | null>(null);
+  const [prices, setPrices] = useState<number[] | null>(null);
+
+  const fetchPrices = useCallback(() => {
+    if (!market.os_index) return;
+    const client = createPublicClient({ chain: getChain(), transport: http() });
+    client.readContract({
+      address: LMSR_HOOK_ADDRESS,
+      abi: FPMM_ABI,
+      functionName: 'getPoolBalances',
+      args: [market.os_index as `0x${string}`],
+    })
+      .then(bals => {
+        const b = bals as bigint[];
+        setPrices(b.map((_, i) => computeImpliedPrice(b, i)));
+      })
+      .catch(() => {});
+  }, [market.os_index]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { fetchPrices(); }, [fetchPrices]);
 
   const { rawNodes, rawEdges } = useMemo(
     () => {
-      const { nodes, edges } = buildGraph(market, setActiveCondition, setActiveOutcome);
+      const { nodes, edges } = buildGraph(market, prices, setActiveCondition, setActiveOutcome);
       return { rawNodes: nodes, rawEdges: edges };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [market.id ?? market.condition_id],
+    [market.id ?? market.condition_id, prices],
   );
 
   const nodes = useMemo(
@@ -273,13 +301,15 @@ export function MarketGraph({ market }: { market: MarketData }) {
       <SwapPanel
         outcome={activeOutcome}
         osIndex={market.os_index}
-        lmsrB={market.lmsr_b}
         onClose={onClose}
+        onTxSuccess={fetchPrices}
       />
       <ConditionPanel
         condition={activeCondition}
         osIndex={market.os_index}
+        ptokenAddress={market.outcomes[0]?.tokenAddress ?? ''}
         onClose={onClose}
+        onTxSuccess={fetchPrices}
       />
     </div>
   );

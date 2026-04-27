@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { WalletButton } from '@/components/wallet-button';
 import { MarketGraph } from '@/components/market-graph';
+import { CidRow } from '@/components/cid-row';
 
 interface Outcome {
   outcomeIndex: number;
@@ -30,6 +31,7 @@ interface MarketData {
   lmsr_b: string | null;
   outcomes: Outcome[];
   resolution_source: string | null;
+  market_cid: string | null;
 }
 
 async function fetchMarket(slug: string): Promise<MarketData | null> {
@@ -46,7 +48,7 @@ async function fetchMarket(slug: string): Promise<MarketData | null> {
 function timeUntil(iso: string | null): string {
   if (!iso) return '—';
   const diff = new Date(iso).getTime() - Date.now();
-  if (diff <= 0) return 'Closed';
+  if (diff <= 0) return 'Time is due';
   const days = Math.floor(diff / 86_400_000);
   if (days > 365) return `${Math.floor(days / 365)}y`;
   if (days > 30) return `${Math.floor(days / 30)}mo`;
@@ -82,7 +84,7 @@ export default async function MarketDetailPage({
       <section className="md-hero">
         <div className="md-hero__meta">
           <span className="md-badge">{isSimple ? 'Simple' : `Mixed · ${market.conditions.length} conditions`}</span>
-          <span className={`md-badge md-badge--time${timeLeft === 'Closed' ? ' md-badge--closed' : ''}`}>
+          <span className={`md-badge md-badge--time${timeLeft === 'Time is due' ? ' md-badge--closed' : ''}`}>
             {timeLeft}
           </span>
           {market.resolution_source && (
@@ -94,6 +96,10 @@ export default async function MarketDetailPage({
 
         {market.description && (
           <p className="md-hero__desc">{market.description}</p>
+        )}
+
+        {market.market_cid && (
+          <CidRow cid={market.market_cid} />
         )}
       </section>
 
