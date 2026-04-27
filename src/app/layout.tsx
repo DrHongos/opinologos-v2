@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Opinologos",
+  title: "Declareindependence",
   description: "On-chain opinions",
 };
 

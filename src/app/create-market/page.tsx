@@ -13,7 +13,7 @@ export default function CreateMarketPage() {
   return (
     <div className="cm-page">
       <header className="cm-header">
-        <Link href="/" className="cm-header__back">← Opinologos</Link>
+        <Link href="/" className="cm-header__back">← Declareindependence</Link>
         <WalletButton />
       </header>
 

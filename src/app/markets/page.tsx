@@ -124,7 +124,7 @@ export default function MarketsPage() {
     <div className="ms-page">
       <header className="ms-header">
         <div className="ms-header__left">
-          <Link href="/" className="ms-header__back">← Opinologos</Link>
+          <Link href="/" className="ms-header__back">← Declareindependence</Link>
           <span className="ms-header__sep">/</span>
           <span className="ms-header__crumb">Markets</span>
         </div>
@@ -311,7 +311,7 @@ function MarketCard({
         </div>
         <a
           className="ms-card__ens"
-          href={`https://app.ens.domains/${market.slug}.opinologos.eth`}
+          href={`https://app.ens.domains/${market.slug}.declareindependence.eth`}
           target="_blank"
           rel="noopener noreferrer"
         >

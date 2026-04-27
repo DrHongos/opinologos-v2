@@ -1,14 +1,14 @@
-// EIP-3668 CCIP-Read gateway for *.opinologos.eth
+// EIP-3668 CCIP-Read gateway for *.declareindependence.eth
 // URL format: GET /api/ens/{sender}/{calldata}.json
 // calldata = ABI-encoded resolve(bytes name, bytes data), including 4-byte selector
 //
 // On-chain resolver must point to: https://{host}/api/ens/{sender}/{data}.json
-// with wildcard support for *.opinologos.eth (ENSIP-10).
+// with wildcard support for *.declareindependence.eth (ENSIP-10).
 import { NextRequest, NextResponse } from 'next/server';
 import { decodeAbiParameters, encodeAbiParameters } from 'viem';
 import { sql } from '@/lib/db';
 
-// DNS wire format → dotted name (e.g. "\x04slug\x0aopinologos\x03eth\x00" → "slug.opinologos.eth")
+// DNS wire format → dotted name (e.g. "\x04slug\x12declareindependence\x03eth\x00" → "slug.declareindependence.eth")
 function dnsWireDecode(hex: string): string {
   const buf = Buffer.from(hex.replace(/^0x/, ''), 'hex');
   const labels: string[] = [];

@@ -36,7 +36,7 @@ export default function Home() {
               color: 'var(--paper)',
             }}
           >
-            Opinologos
+            Declareindependence
           </span>
         </div>
         <WalletButton />

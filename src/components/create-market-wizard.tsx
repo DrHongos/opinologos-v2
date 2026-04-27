@@ -621,7 +621,7 @@ export function CreateMarketWizard() {
               <Field label="Question CID" value={questionCid} />
               {finalCid && <Field label="Market CID" value={finalCid} />}
               {ensSlug && (
-                <Field label="ENS name" value={`${ensSlug}.opinologos.eth`} mono={false} />
+                <Field label="ENS name" value={`${ensSlug}.declareindependence.eth`} mono={false} />
               )}
             </div>
 
@@ -641,7 +641,7 @@ export function CreateMarketWizard() {
             <p className="cmw__success-note">
               Share the market CID with agents and front-ends. The oracle uses{' '}
               <code>keccak256(cidBytes)</code> as <code>questionId</code> for{' '}
-              <code>reportPayouts</code>. Resolve via <code>*.opinologos.eth</code>.
+              <code>reportPayouts</code>. Resolve via <code>*.declareindependence.eth</code>.
             </p>
           </div>
         </div>
