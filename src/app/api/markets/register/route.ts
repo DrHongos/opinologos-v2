@@ -59,7 +59,12 @@ export async function POST(req: NextRequest) {
   try {
     await ensureSchema();
 
-    const slug = slugify(question);
+    const baseSlug = slugify(question);
+    // If another market already owns this slug, append an ID fragment to disambiguate
+    const slugConflict = await sql`SELECT id FROM markets WHERE slug = ${baseSlug} AND id != ${id} LIMIT 1`;
+    const slug = slugConflict.rows.length > 0
+      ? baseSlug.slice(0, 55) + '-' + (id as string).replace(/-/g, '').slice(0, 7)
+      : baseSlug;
     const sharesLow = sharesToken ? (sharesToken as string).toLowerCase() : null;
     const endTimestamp = endTime ? new Date(endTime * 1000).toISOString() : null;
 
