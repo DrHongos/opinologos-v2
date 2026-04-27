@@ -24,24 +24,19 @@ export interface SlotInfo {
   conditionIndex: number;
   slotIndex: number;
   price: number | null;
-  combinedOutcomes: Array<{
-    outcome: Outcome;
-    combinedLabel: string;
-    price: number | null;
-  }>;
+  sourceOsIndex: string;
 }
 
 interface SlotPanelProps {
   slot: SlotInfo | null;
-  osIndex: string;
   onClose: () => void;
-  onTradeOutcome: (o: Outcome) => void;
+  onTradeOutcome: (o: Outcome, osIndex: string) => void;
   onTxSuccess?: () => void;
 }
 
 type Tab = 'split' | 'merge';
 
-export function SlotPanel({ slot, osIndex, onClose, onTradeOutcome, onTxSuccess }: SlotPanelProps) {
+export function SlotPanel({ slot, onClose, onTradeOutcome, onTxSuccess }: SlotPanelProps) {
   const isOpen = slot !== null;
   const [tab, setTab] = useState<Tab>('split');
   const [amount, setAmount] = useState('');
@@ -60,6 +55,8 @@ export function SlotPanel({ slot, osIndex, onClose, onTradeOutcome, onTxSuccess 
     const [account] = await client.getAddresses();
     return { client, account };
   }, [wallets]);
+
+  const sourceOsIndex = slot?.sourceOsIndex ?? '0x';
 
   async function handleSplit() {
     if (!amount) return;
@@ -91,8 +88,8 @@ export function SlotPanel({ slot, osIndex, onClose, onTradeOutcome, onTxSuccess 
       const tx = await client.writeContract({
         address: LMSR_HOOK_ADDRESS,
         abi: FPMM_ABI,
-        functionName: 'splitPosition',
-        args: [osIndex as `0x${string}`, amountWad],
+        functionName: 'splitCollateral',
+        args: [sourceOsIndex as `0x${string}`, amountWad],
         account,
         chain: getChain(),
         gas: 2_000_000n,
@@ -137,8 +134,8 @@ export function SlotPanel({ slot, osIndex, onClose, onTradeOutcome, onTxSuccess 
       const tx = await client.writeContract({
         address: LMSR_HOOK_ADDRESS,
         abi: FPMM_ABI,
-        functionName: 'mergePositions',
-        args: [osIndex as `0x${string}`, amountWad],
+        functionName: 'mergeCollateral',
+        args: [sourceOsIndex as `0x${string}`, amountWad],
         account,
         chain: getChain(),
         gas: 2_000_000n,
@@ -151,6 +148,17 @@ export function SlotPanel({ slot, osIndex, onClose, onTradeOutcome, onTxSuccess 
     } finally {
       setTxPending(false);
     }
+  }
+
+  function handleTrade() {
+    if (!slot) return;
+    const outcome: Outcome = {
+      outcomeIndex: slot.slotIndex,
+      label: slot.label,
+      tokenAddress: '0x',
+      positionId: null,
+    };
+    onTradeOutcome(outcome, slot.sourceOsIndex);
   }
 
   return (
@@ -166,35 +174,23 @@ export function SlotPanel({ slot, osIndex, onClose, onTradeOutcome, onTxSuccess 
           <h2 className="mg-panel__title">{slot?.label ?? '—'}</h2>
           {slot?.price !== null && slot?.price !== undefined && (
             <span className="mg-panel__mono" style={{ color: '#14b8a6' }}>
-              {slot.price.toFixed(4)} marginal
+              {slot.price.toFixed(4)}
             </span>
           )}
         </div>
 
         <div className="mg-panel__body">
-          {/* Combined outcomes for this slot */}
-          <p className="mg-slot__section-label">Combined outcomes</p>
-          <div className="mg-slot__outcomes">
-            {slot?.combinedOutcomes.map(({ outcome, combinedLabel, price }) => (
-              <div key={outcome.outcomeIndex} className="mg-slot__row">
-                <div className="mg-slot__row-info">
-                  <span className="mg-slot__row-label">{combinedLabel}</span>
-                  {price !== null && (
-                    <span className="mg-slot__row-price">{price.toFixed(4)}</span>
-                  )}
-                </div>
-                <button
-                  className="mg-slot__trade-btn"
-                  onClick={() => { onTradeOutcome(outcome); }}
-                >
-                  Trade
-                </button>
-              </div>
-            ))}
-          </div>
+          <button
+            className="mg-panel__action"
+            style={{ marginBottom: '1.5rem' }}
+            onClick={handleTrade}
+            disabled={!wallets[0]}
+          >
+            {!wallets[0] ? 'Connect wallet' : `Trade ${slot?.label ?? 'outcome'}`}
+          </button>
 
-          {/* Split / Merge */}
-          <div className="mg-dir-toggle" style={{ marginTop: '1.5rem' }}>
+          {/* Split / Merge for source market */}
+          <div className="mg-dir-toggle">
             <button
               className={`mg-dir-toggle__btn${tab === 'split' ? ' mg-dir-toggle__btn--active' : ''}`}
               onClick={() => setTab('split')}
@@ -211,8 +207,8 @@ export function SlotPanel({ slot, osIndex, onClose, onTradeOutcome, onTxSuccess 
 
           <p style={{ fontSize: '0.72rem', color: 'rgba(245,245,240,0.45)', margin: '0.35rem 0 0.5rem', lineHeight: 1.45 }}>
             {tab === 'split'
-              ? `Splits collateral into all ${slot?.combinedOutcomes.length ?? '?'} combined outcome tokens for this market.`
-              : `Merges all combined outcome tokens (one of each) back into collateral.`}
+              ? 'Splits collateral into all outcome tokens for this source market.'
+              : 'Merges all outcome tokens (one of each) back into collateral.'}
           </p>
 
           <div className="mg-field">

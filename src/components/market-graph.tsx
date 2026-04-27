@@ -33,6 +33,7 @@ interface ConditionInfo {
   id: string;
   slots: number;
   question?: string | null;
+  os_index?: string | null;
 }
 
 interface MarketData {
@@ -212,6 +213,7 @@ export const POOL_SENTINEL: ConditionInfo = { id: '', slots: 0 };
 function buildGraph(
   market: MarketData,
   prices: number[] | null,
+  sourcePrices: Record<string, number[]>,
   onConditionClick: (c: ConditionInfo) => void,
   onOutcomeClick: (o: Outcome) => void,
   onPoolOpen: () => void,
@@ -271,50 +273,28 @@ function buildGraph(
       });
 
       // Individual condition outcome (slot) nodes
+      const condSourceOsIndex = cond.os_index ?? '';
+      const condSourcePrices = condSourceOsIndex ? (sourcePrices[condSourceOsIndex] ?? null) : null;
+
       for (let slotIdx = 0; slotIdx < cond.slots; slotIdx++) {
         const coId = `co-${ci}-${slotIdx}`;
 
         let label: string;
-        let marginalPrice: number | null = null;
-
         if (ci === 0) {
-          // Condition A: aIdx = slotIdx, any bIdx → pick first row's label part
           label = market.outcomes[slotIdx * nB]?.label?.split(' × ')[0] ?? `Outcome ${slotIdx}`;
-          if (prices) {
-            marginalPrice = 0;
-            for (let b = 0; b < nB; b++) {
-              marginalPrice += prices[slotIdx * nB + b] ?? 0;
-            }
-          }
         } else {
-          // Condition B: bIdx = slotIdx, any aIdx → pick first column's label part
           label = market.outcomes[slotIdx]?.label?.split(' × ')[1] ?? `Outcome ${slotIdx}`;
-          if (prices) {
-            marginalPrice = 0;
-            for (let a = 0; a < nA; a++) {
-              marginalPrice += prices[a * nB + slotIdx] ?? 0;
-            }
-          }
         }
 
-        const slotCombinedOutcomes = market.outcomes
-          .filter(o =>
-            ci === 0
-              ? Math.floor(o.outcomeIndex / nB) === slotIdx
-              : o.outcomeIndex % nB === slotIdx,
-          )
-          .map(o => ({
-            outcome: o,
-            combinedLabel: o.label ?? `${Math.floor(o.outcomeIndex / nB)} × ${o.outcomeIndex % nB}`,
-            price: prices ? (prices[o.outcomeIndex] ?? null) : null,
-          }));
+        // Price from source market pool, not mixed
+        const sourcePrice: number | null = condSourcePrices ? (condSourcePrices[slotIdx] ?? null) : null;
 
         const slotInfo: SlotInfo = {
           label,
           conditionIndex: ci,
           slotIndex: slotIdx,
-          price: marginalPrice,
-          combinedOutcomes: slotCombinedOutcomes,
+          price: sourcePrice,
+          sourceOsIndex: condSourceOsIndex,
         };
 
         nodes.push({
@@ -322,7 +302,7 @@ function buildGraph(
           type: 'condOutcome',
           position: { x: 0, y: 0 },
           data: {
-            label, price: marginalPrice, conditionIndex: ci, slotIndex: slotIdx,
+            label, price: sourcePrice, conditionIndex: ci, slotIndex: slotIdx,
             onOpen: () => onSlotClick(slotInfo),
           } satisfies CondOutcomeNodeData,
           draggable: false,
@@ -429,38 +409,67 @@ function buildGraph(
 export function MarketGraph({ market }: { market: MarketData }) {
   const [activeCondition, setActiveCondition] = useState<ConditionInfo | null>(null);
   const [activeOutcome, setActiveOutcome] = useState<Outcome | null>(null);
+  const [activeOutcomeOsIndex, setActiveOutcomeOsIndex] = useState<string>(market.os_index);
   const [activeSlot, setActiveSlot] = useState<SlotInfo | null>(null);
   const [prices, setPrices] = useState<number[] | null>(null);
+  const [sourcePrices, setSourcePrices] = useState<Record<string, number[]>>({});
 
   const fetchPrices = useCallback(() => {
-    if (!market.os_index) return;
     const client = createPublicClient({ chain: getChain(), transport: http() });
-    client.readContract({
-      address: LMSR_HOOK_ADDRESS,
-      abi: FPMM_ABI,
-      functionName: 'getPoolBalances',
-      args: [market.os_index as `0x${string}`],
-    })
-      .then(bals => {
-        const b = bals as bigint[];
-        setPrices(b.map((_, i) => computeImpliedPrice(b, i)));
+
+    // Fetch mixed (or simple) market prices
+    if (market.os_index) {
+      client.readContract({
+        address: LMSR_HOOK_ADDRESS,
+        abi: FPMM_ABI,
+        functionName: 'getPoolBalances',
+        args: [market.os_index as `0x${string}`],
       })
-      .catch(() => {});
-  }, [market.os_index]); // eslint-disable-line react-hooks/exhaustive-deps
+        .then(bals => {
+          const b = bals as bigint[];
+          setPrices(b.map((_, i) => computeImpliedPrice(b, i)));
+        })
+        .catch(() => {});
+    }
+
+    // Fetch source market prices for each condition with its own OS
+    const sourceOsIndices = market.conditions
+      .map(c => c.os_index)
+      .filter((oi): oi is string => !!oi);
+
+    for (const oi of sourceOsIndices) {
+      client.readContract({
+        address: LMSR_HOOK_ADDRESS,
+        abi: FPMM_ABI,
+        functionName: 'getPoolBalances',
+        args: [oi as `0x${string}`],
+      })
+        .then(bals => {
+          const b = bals as bigint[];
+          setSourcePrices(prev => ({ ...prev, [oi]: b.map((_, i) => computeImpliedPrice(b, i)) }));
+        })
+        .catch(() => {});
+    }
+  }, [market.os_index, market.conditions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { fetchPrices(); }, [fetchPrices]);
 
   const openPoolPanel = useCallback(() => setActiveCondition(POOL_SENTINEL), []);
 
+  const handleOutcomeClick = useCallback((o: Outcome) => {
+    setActiveOutcome(o);
+    setActiveOutcomeOsIndex(market.os_index);
+  }, [market.os_index]);
+
   const { rawNodes, rawEdges } = useMemo(
     () => {
       const { nodes, edges } = buildGraph(
-        market, prices, setActiveCondition, setActiveOutcome, openPoolPanel, setActiveSlot,
+        market, prices, sourcePrices, setActiveCondition, handleOutcomeClick, openPoolPanel, setActiveSlot,
       );
       return { rawNodes: nodes, rawEdges: edges };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [market.id ?? market.condition_id, prices],
+    [market.id ?? market.condition_id, prices, sourcePrices],
   );
 
   const nodes = useMemo(
@@ -503,15 +512,18 @@ export function MarketGraph({ market }: { market: MarketData }) {
 
       <SwapPanel
         outcome={activeOutcome}
-        osIndex={market.os_index}
+        osIndex={activeOutcomeOsIndex}
         onClose={onClose}
         onTxSuccess={fetchPrices}
       />
       <SlotPanel
         slot={activeSlot}
-        osIndex={market.os_index}
         onClose={onClose}
-        onTradeOutcome={(o) => { setActiveSlot(null); setActiveOutcome(o); }}
+        onTradeOutcome={(o, osIdx) => {
+          setActiveSlot(null);
+          setActiveOutcome(o);
+          setActiveOutcomeOsIndex(osIdx);
+        }}
         onTxSuccess={fetchPrices}
       />
       <ConditionPanel

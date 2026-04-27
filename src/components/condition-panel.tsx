@@ -252,7 +252,7 @@ export function ConditionPanel({ condition, osIndex, ptokenAddress, onClose, onT
       const tx = await client.writeContract({
         address: LMSR_HOOK_ADDRESS,
         abi: FPMM_ABI,
-        functionName: 'splitPosition',
+        functionName: 'splitCollateral',
         args: [osIndex as `0x${string}`, amountWad],
         account,
         chain: getChain(),
@@ -300,7 +300,7 @@ export function ConditionPanel({ condition, osIndex, ptokenAddress, onClose, onT
       const tx = await client.writeContract({
         address: LMSR_HOOK_ADDRESS,
         abi: FPMM_ABI,
-        functionName: 'mergePositions',
+        functionName: 'mergeCollateral',
         args: [osIndex as `0x${string}`, amountWad],
         account,
         chain: getChain(),

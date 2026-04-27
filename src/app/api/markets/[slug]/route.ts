@@ -54,9 +54,20 @@ export async function GET(
     }));
 
     // Derive conditions array if not stored yet
-    const conditions = market.conditions ?? [
-      { id: market.condition_id, slots: outcomes.length || 2 },
-    ];
+    let conditions: Array<{ id: string; slots: number; question?: string | null; os_index?: string | null }> =
+      market.conditions ?? [{ id: market.condition_id, slots: outcomes.length || 2 }];
+
+    // For mixed markets, enrich each condition with its source market's os_index
+    if (conditions.length > 1) {
+      const condIds = conditions.map((c: { id: string }) => c.id);
+      const srcRes = await sql.query(
+        `SELECT condition_id, os_index FROM markets WHERE condition_id = ANY($1)`,
+        [condIds],
+      );
+      const srcOsMap: Record<string, string> = {};
+      for (const row of srcRes.rows) srcOsMap[row.condition_id] = row.os_index;
+      conditions = conditions.map(c => ({ ...c, os_index: srcOsMap[c.id] ?? null }));
+    }
 
     return NextResponse.json({ market: { ...market, outcomes, conditions } });
   } catch (e) {
