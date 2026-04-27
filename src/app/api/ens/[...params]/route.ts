@@ -5,7 +5,8 @@
 // On-chain resolver must point to: https://{host}/api/ens/{sender}/{data}.json
 // with wildcard support for *.declareindependence.eth (ENSIP-10).
 import { NextRequest, NextResponse } from 'next/server';
-import { decodeAbiParameters, encodeAbiParameters } from 'viem';
+import { decodeAbiParameters, encodeAbiParameters, encodePacked, keccak256 } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import { sql } from '@/lib/db';
 
 // DNS wire format → dotted name (e.g. "\x04slug\x12declareindependence\x03eth\x00" → "slug.declareindependence.eth")
@@ -45,12 +46,14 @@ async function findMarketCid(subdomain: string): Promise<string | null> {
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ params: string[] }> }) {
   try {
     const { params: segments } = await params;
-    // segments[0] = sender, segments[1] = calldata (may end in .json)
+    // segments[0] = sender (resolver contract), segments[1] = calldata (may end in .json)
     if (!segments || segments.length < 2) {
       return NextResponse.json({ error: 'Bad request' }, { status: 400 });
     }
 
+    const sender = segments[0] as `0x${string}`;
     const rawCalldata = segments[1].replace(/\.json$/, '');
+    const calldataHex = (rawCalldata.startsWith('0x') ? rawCalldata : `0x${rawCalldata}`) as `0x${string}`;
     const hex = rawCalldata.replace(/^0x/, '');
 
     // Skip 4-byte function selector (resolve(bytes,bytes) = 0x9061b923)
@@ -69,8 +72,25 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ par
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
-    // Return ABI-encoded string (text record with ipfs:// URL)
-    const encoded = encodeAbiParameters([{ type: 'string' }], [`ipfs://${cid}`]);
+    const expires = BigInt(Math.floor(Date.now() / 1000) + 300);
+
+    // Inner result: ABI-encoded text record
+    const result = encodeAbiParameters([{ type: 'string' }], [`ipfs://${cid}`]);
+
+    // EIP-3668 signature: keccak256(0x1900 || sender || expires || keccak256(request) || keccak256(result))
+    const sigHash = keccak256(encodePacked(
+      ['bytes2', 'address', 'uint64', 'bytes32', 'bytes32'],
+      ['0x1900', sender, expires, keccak256(calldataHex), keccak256(result)],
+    ));
+
+    const account = privateKeyToAccount(process.env.ORACLE_PK as `0x${string}`);
+    const sig = await account.sign({ hash: sigHash });
+
+    // EIP-3668 outer encoding: (bytes result, uint64 expires, bytes sig)
+    const encoded = encodeAbiParameters(
+      [{ type: 'bytes' }, { type: 'uint64' }, { type: 'bytes' }],
+      [result, expires, sig],
+    );
 
     return NextResponse.json({ data: encoded });
   } catch (e) {
