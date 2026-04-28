@@ -1,10 +1,11 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import Link from 'next/link';
 import { WalletButton } from '@/components/wallet-button';
 import { MarketGraph } from '@/components/market-graph';
 import { CidRow } from '@/components/cid-row';
 import { MarketStatus } from '@/components/market-status';
 import { AgentHistory } from '@/components/agent-history';
+import { sql } from '@/lib/db';
 
 interface Outcome {
   outcomeIndex: number;
@@ -37,14 +38,57 @@ interface MarketData {
 }
 
 async function fetchMarket(slug: string): Promise<MarketData | null> {
-  const baseUrl =
-    process.env.NEXT_PUBLIC_BASE_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  try {
+    const result = await sql.query(
+      `SELECT
+         id, slug, question, description, end_time, oracle,
+         collateral, hook_address, lmsr_b,
+         resolution_source, resolution_method, resolution_notes,
+         question_cid, market_cid, os_index, shares_token, condition_id,
+         conditions, created_at
+       FROM markets
+       WHERE slug = $1
+       LIMIT 1`,
+      [slug],
+    );
 
-  const res = await fetch(`${baseUrl}/api/markets/${slug}`, { cache: 'no-store' });
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data.market ?? null;
+    if (result.rows.length === 0) return null;
+
+    const market = result.rows[0];
+
+    const tokensResult = await sql.query(
+      `SELECT outcome_index, label, token_address, position_id
+       FROM market_tokens
+       WHERE market_id = $1
+       ORDER BY outcome_index`,
+      [market.id],
+    );
+
+    const outcomes = tokensResult.rows.map((r: Record<string, unknown>) => ({
+      outcomeIndex: r.outcome_index,
+      label: r.label,
+      tokenAddress: r.token_address,
+      positionId: r.position_id,
+    }));
+
+    let conditions: Array<{ id: string; slots: number; os_index?: string | null }> =
+      market.conditions ?? [{ id: market.condition_id, slots: outcomes.length || 2 }];
+
+    if (conditions.length > 1) {
+      const condIds = conditions.map((c: { id: string }) => c.id);
+      const srcRes = await sql.query(
+        `SELECT condition_id, os_index FROM markets WHERE condition_id = ANY($1)`,
+        [condIds],
+      );
+      const srcOsMap: Record<string, string> = {};
+      for (const row of srcRes.rows) srcOsMap[row.condition_id] = row.os_index;
+      conditions = conditions.map(c => ({ ...c, os_index: srcOsMap[c.id] ?? null }));
+    }
+
+    return { ...market, outcomes, conditions };
+  } catch {
+    return null;
+  }
 }
 
 function timeUntil(iso: string | null): string {
