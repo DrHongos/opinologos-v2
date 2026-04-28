@@ -11,6 +11,13 @@ interface Outcome {
   positionId: string | null;
 }
 
+interface Resolution {
+  confidence: number | null;
+  reasoning:  string | null;
+  sources:    string[] | null;
+  payouts:    number[] | null;
+}
+
 interface Market {
   id: string;
   slug: string;
@@ -27,13 +34,14 @@ interface Market {
   created_at: string;
   conditions: Array<{ id: string; slots: number; question?: string | null }> | null;
   outcomes: Outcome[];
+  resolution: Resolution | null;
 }
 
-type FilterKey = 'q' | 'topic' | 'entity' | 'keyword' | 'type';
+type FilterKey = 'q' | 'topic' | 'entity' | 'keyword' | 'type' | 'status';
 type Filters = Record<FilterKey, string>;
 
 const LIMIT = 12;
-const EMPTY_FILTERS: Filters = { q: '', topic: '', entity: '', keyword: '', type: '' };
+const EMPTY_FILTERS: Filters = { q: '', topic: '', entity: '', keyword: '', type: '', status: '' };
 
 function isMixedMarket(m: Market): boolean {
   if (m.conditions) return m.conditions.length > 1;
@@ -65,6 +73,7 @@ function buildUrl(f: Filters, off: number): string {
   if (f.entity) p.set('entity', f.entity);
   if (f.keyword) p.set('keyword', f.keyword);
   if (f.type && f.type !== 'all') p.set('type', f.type);
+  if (f.status && f.status !== 'all') p.set('status', f.status);
   p.set('limit', String(LIMIT));
   p.set('offset', String(off));
   return `/api/markets?${p}`;
@@ -124,7 +133,7 @@ export default function MarketsPage() {
     load(EMPTY_FILTERS, 0, false);
   }
 
-  const activeFilters = (Object.entries(filters) as [FilterKey, string][]).filter(([k, v]) => v && k !== 'type');
+  const activeFilters = (Object.entries(filters) as [FilterKey, string][]).filter(([k, v]) => v && k !== 'type' && k !== 'status');
   const hasMore = markets.length < total && !loading;
 
   return (
@@ -164,19 +173,36 @@ export default function MarketsPage() {
           )}
         </div>
 
-        <div className="ms-type-toggle">
-          {(['all', 'simple', 'mixed'] as const).map(t => {
-            const active = (filters.type === t) || (t === 'all' && !filters.type);
-            return (
-              <button
-                key={t}
-                className={`ms-type-btn${active ? (t === 'mixed' ? ' ms-type-btn--active-mixed' : ' ms-type-btn--active') : ''}`}
-                onClick={() => applyFilter('type', t === 'all' ? '' : t)}
-              >
-                {t === 'all' ? 'All' : t === 'simple' ? 'Simple' : 'Mixed'}
-              </button>
-            );
-          })}
+        <div className="ms-filter-row">
+          <div className="ms-type-toggle">
+            {(['all', 'simple', 'mixed'] as const).map(t => {
+              const active = (filters.type === t) || (t === 'all' && !filters.type);
+              return (
+                <button
+                  key={t}
+                  className={`ms-type-btn${active ? (t === 'mixed' ? ' ms-type-btn--active-mixed' : ' ms-type-btn--active') : ''}`}
+                  onClick={() => applyFilter('type', t === 'all' ? '' : t)}
+                >
+                  {t === 'all' ? 'All' : t === 'simple' ? 'Simple' : 'Mixed'}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="ms-type-toggle">
+            {(['all', 'live', 'resolved'] as const).map(s => {
+              const active = (filters.status === s) || (s === 'all' && !filters.status);
+              return (
+                <button
+                  key={s}
+                  className={`ms-type-btn${active ? (s === 'resolved' ? ' ms-type-btn--active-resolved' : ' ms-type-btn--active') : ''}`}
+                  onClick={() => applyFilter('status', s === 'all' ? '' : s)}
+                >
+                  {s === 'all' ? 'All' : s === 'live' ? 'Live' : 'Resolved'}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {activeFilters.length > 0 && (
@@ -236,6 +262,7 @@ export default function MarketsPage() {
                 index={i}
                 mixed={isMixedMarket(m)}
                 onTagClick={applyFilter}
+                resolution={m.resolution}
               />
             ))}
           </div>
@@ -266,16 +293,27 @@ function LoadingDots() {
   return <span className="ms-dots">{dots}</span>;
 }
 
+function winnerLabel(outcomes: Outcome[], payouts: number[] | null): string | null {
+  if (!payouts || payouts.length === 0) return null;
+  const maxPayout = Math.max(...payouts);
+  if (maxPayout <= 0) return null;
+  const winIdx = payouts.indexOf(maxPayout);
+  const outcome = outcomes.find(o => o.outcomeIndex === winIdx);
+  return outcome?.label ?? `Outcome ${winIdx}`;
+}
+
 function MarketCard({
   market,
   index,
   mixed,
   onTagClick,
+  resolution,
 }: {
   market: Market;
   index: number;
   mixed: boolean;
   onTagClick: (key: FilterKey, val: string) => void;
+  resolution: Resolution | null;
 }) {
   const topics   = market.attention_topics   ?? [];
   const entities = market.attention_entities ?? [];
@@ -283,43 +321,80 @@ function MarketCard({
   const timeLeft = timeUntil(market.end_time);
   const isClosed = timeLeft === 'Closed';
   const hasTags  = topics.length + entities.length + keywords.length > 0;
+  const winner   = resolution ? winnerLabel(market.outcomes, resolution.payouts) : null;
 
   return (
     <Link
       href={`/markets/${market.slug}`}
-      className={`ms-card${mixed ? ' ms-card--mixed' : ''}`}
+      className={`ms-card${mixed ? ' ms-card--mixed' : ''}${resolution ? ' ms-card--resolved' : ''}`}
       style={{ animationDelay: `${Math.min(index, 11) * 0.045}s` }}
     >
       <div className="ms-card__accent" />
 
       <div className="ms-card__body">
-        {mixed && <span className="ms-badge ms-badge--mixed">Mixed</span>}
+        <div className="ms-card__badges">
+          {mixed && <span className="ms-badge ms-badge--mixed">Mixed</span>}
+          {resolution && <span className="ms-badge ms-badge--resolved">Resolved</span>}
+        </div>
         <h2 className="ms-card__question">{market.question}</h2>
 
-        {market.description && (
+        {market.description && !resolution && (
           <p className="ms-card__desc">{market.description}</p>
         )}
 
-        {market.outcomes.length > 0 && (
-          <div className="ms-card__outcomes">
-            {market.outcomes.map(o => (
-              <span key={o.outcomeIndex} className="ms-outcome">
-                {o.label ?? `Outcome ${o.outcomeIndex}`}
-              </span>
-            ))}
+        {resolution ? (
+          <div className="ms-resolution">
+            {winner && (
+              <div className="ms-resolution__winner">
+                <span className="ms-resolution__winner-label">Winner</span>
+                <span className="ms-resolution__winner-name">{winner}</span>
+              </div>
+            )}
+            {resolution.reasoning && (
+              <p className="ms-resolution__reasoning">{resolution.reasoning}</p>
+            )}
+            {resolution.sources && resolution.sources.length > 0 && (
+              <div className="ms-resolution__sources">
+                {resolution.sources.slice(0, 2).map((src, i) => (
+                  <a
+                    key={i}
+                    href={src}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ms-resolution__source"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    {(() => { try { return new URL(src).hostname; } catch { return src.slice(0, 32); } })()}↗
+                  </a>
+                ))}
+                {resolution.sources.length > 2 && (
+                  <span className="ms-resolution__source-more">+{resolution.sources.length - 2} more</span>
+                )}
+              </div>
+            )}
           </div>
+        ) : (
+          market.outcomes.length > 0 && (
+            <div className="ms-card__outcomes">
+              {market.outcomes.map(o => (
+                <span key={o.outcomeIndex} className="ms-outcome">
+                  {o.label ?? `Outcome ${o.outcomeIndex}`}
+                </span>
+              ))}
+            </div>
+          )
         )}
 
         {hasTags && (
           <div className="ms-card__tags">
             {topics.slice(0, 3).map(t => (
-              <button key={t} className="ms-tag ms-tag--topic" onClick={() => onTagClick('topic', t)}>{t}</button>
+              <button key={t} className="ms-tag ms-tag--topic" onClick={e => { e.preventDefault(); onTagClick('topic', t); }}>{t}</button>
             ))}
             {entities.slice(0, 2).map(e => (
-              <button key={e} className="ms-tag ms-tag--entity" onClick={() => onTagClick('entity', e)}>@{e}</button>
+              <button key={e} className="ms-tag ms-tag--entity" onClick={ev => { ev.preventDefault(); onTagClick('entity', e); }}>@{e}</button>
             ))}
             {keywords.slice(0, 3).map(k => (
-              <button key={k} className="ms-tag ms-tag--keyword" onClick={() => onTagClick('keyword', k)}>#{k}</button>
+              <button key={k} className="ms-tag ms-tag--keyword" onClick={e => { e.preventDefault(); onTagClick('keyword', k); }}>#{k}</button>
             ))}
           </div>
         )}
@@ -340,6 +415,7 @@ function MarketCard({
           href={`https://app.ens.domains/${market.slug}.declareindependence.eth`}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={e => e.stopPropagation()}
         >
           {market.slug}.eth&nbsp;↗
         </a>

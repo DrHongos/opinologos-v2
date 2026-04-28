@@ -94,6 +94,77 @@ async function getClients(wallet: { address: string; getEthereumProvider: () => 
   return { walletClient, publicClient };
 }
 
+// ── Agent Panel ───────────────────────────────────────────────────────────────
+
+interface AgentRunResult {
+  processed: number;
+  resolved: string[];
+  nudged: string[];
+  skipped: string[];
+  errors: string[];
+}
+
+function AgentPanel() {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<AgentRunResult | null>(null);
+  const [error, setError] = useState('');
+
+  async function handleRun() {
+    setRunning(true);
+    setResult(null);
+    setError('');
+    try {
+      const res = await fetch('/api/admin/run-agent');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Agent run failed');
+      setResult(data as AgentRunResult);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Agent run failed');
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <section className="adm-panel">
+      <div className="adm-panel__header">
+        <h2 className="adm-panel__title">Agent</h2>
+        <button className="adm-btn" onClick={handleRun} disabled={running}>
+          {running ? 'Running…' : 'Run Agent'}
+        </button>
+      </div>
+      {error && <div className="adm-status adm-status--err">{error}</div>}
+      {result && (
+        <div className="adm-research">
+          <div className="adm-research__winner">
+            Processed: <strong>{result.processed}</strong>
+          </div>
+          {result.resolved.length > 0 && (
+            <div className="adm-status adm-status--ok">
+              Resolved: {result.resolved.join(', ')}
+            </div>
+          )}
+          {result.nudged.length > 0 && (
+            <div className="adm-status adm-status--ok">
+              Nudged: {result.nudged.join(', ')}
+            </div>
+          )}
+          {result.skipped.length > 0 && (
+            <div className="adm-research__reasoning">
+              Skipped: {result.skipped.join(', ')}
+            </div>
+          )}
+          {result.errors.length > 0 && (
+            <div className="adm-status adm-status--err">
+              Errors: {result.errors.join(', ')}
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ── Fee Panel ─────────────────────────────────────────────────────────────────
 
 function FeePanel({ wallet }: { wallet: { address: string; getEthereumProvider: () => Promise<unknown> } }) {
@@ -476,6 +547,7 @@ export default function AdminPage() {
 
       {authenticated && isOracle && wallet && (
         <main className="adm-main">
+          <AgentPanel />
           <FeePanel wallet={wallet} />
           <MarketsPanel wallet={wallet} />
         </main>

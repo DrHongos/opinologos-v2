@@ -364,6 +364,23 @@ export const FPMM_ABI = [
     outputs: [{ name: '', type: 'uint256' }],
     stateMutability: 'view',
   },
+  {
+    name: 'getOutcomeSlotCount',
+    type: 'function',
+    inputs: [{ name: 'conditionId', type: 'bytes32' }],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    name: 'getOSIndex',
+    type: 'function',
+    inputs: [
+      { name: 'collateral', type: 'address' },
+      { name: 'conditions', type: 'bytes32[]' },
+    ],
+    outputs: [{ name: '', type: 'bytes32' }],
+    stateMutability: 'pure',
+  },
 ] as const;
 
 // Backward-compat alias

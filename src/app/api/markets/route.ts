@@ -17,6 +17,7 @@ export async function GET(req: NextRequest) {
   const entity  = searchParams.get('entity');
   const keyword = searchParams.get('keyword');
   const type    = searchParams.get('type');      // 'simple' | 'mixed'
+  const status  = searchParams.get('status');    // 'live' | 'resolved'
   const before  = searchParams.get('before');   // ISO date or unix timestamp
   const after   = searchParams.get('after');
   const limit   = Math.min(parseInt(searchParams.get('limit') ?? '20', 10), 100);
@@ -72,8 +73,23 @@ export async function GET(req: NextRequest) {
       params.push(new Date(isNaN(Number(before)) ? before : Number(before) * 1000).toISOString());
       p++;
     }
+    if (status === 'resolved') {
+      conditions.push(`res.resolved IS NOT NULL`);
+    } else if (status === 'live') {
+      conditions.push(`res.resolved IS NULL`);
+    }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    // Lateral join: cheapest resolved event per market (NULL when none exists)
+    const resJoin = `
+      LEFT JOIN LATERAL (
+        SELECT confidence, reasoning, sources, payouts, TRUE AS resolved
+        FROM agent_events
+        WHERE market_id = m.id AND event_type = 'resolved'
+        ORDER BY created_at DESC
+        LIMIT 1
+      ) res ON true`;
 
     // Order by relevance when searching, otherwise newest first
     const order = q
@@ -82,12 +98,17 @@ export async function GET(req: NextRequest) {
 
     const marketsResult = await sql.query(
       `SELECT
-         id, slug, question, description, end_time, oracle,
-         collateral, hook_address, lmsr_b,
-         resolution_source, resolution_method, resolution_notes,
-         attention_entities, attention_topics, attention_signals, attention_keywords,
-         question_cid, market_cid, os_index, shares_token, condition_id, conditions, created_at
-       FROM markets
+         m.id, m.slug, m.question, m.description, m.end_time, m.oracle,
+         m.collateral, m.hook_address, m.lmsr_b,
+         m.resolution_source, m.resolution_method, m.resolution_notes,
+         m.attention_entities, m.attention_topics, m.attention_signals, m.attention_keywords,
+         m.question_cid, m.market_cid, m.os_index, m.shares_token, m.condition_id, m.conditions, m.created_at,
+         res.confidence AS resolution_confidence,
+         res.reasoning  AS resolution_reasoning,
+         res.sources    AS resolution_sources,
+         res.payouts    AS resolution_payouts
+       FROM markets m
+       ${resJoin}
        ${where}
        ${order}
        LIMIT $${p} OFFSET $${p + 1}`,
@@ -95,7 +116,7 @@ export async function GET(req: NextRequest) {
     );
 
     const countResult = await sql.query(
-      `SELECT COUNT(*) AS total FROM markets ${where}`,
+      `SELECT COUNT(*) AS total FROM markets m ${resJoin} ${where}`,
       params,
     );
 
@@ -126,6 +147,14 @@ export async function GET(req: NextRequest) {
     const markets = marketsResult.rows.map((r: Record<string, unknown>) => ({
       ...r,
       outcomes: tokensByMarket[r.id as string] ?? [],
+      resolution: r.resolution_confidence !== null || r.resolution_reasoning !== null || r.resolution_payouts !== null
+        ? {
+            confidence: r.resolution_confidence,
+            reasoning:  r.resolution_reasoning,
+            sources:    r.resolution_sources,
+            payouts:    r.resolution_payouts,
+          }
+        : null,
     }));
 
     return NextResponse.json({

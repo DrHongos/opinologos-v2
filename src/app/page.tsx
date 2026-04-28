@@ -2,6 +2,7 @@ import Link from "next/link";
 import { WalletButton } from "@/components/wallet-button";
 
 export default function Home() {
+  const mcp_link="claude mcp add di --transport http https://opinologos-v2.vercel.app/api/mcp"
   return (
     <div className="min-h-screen flex flex-col" style={{ background: 'var(--ink)' }}>
       {/* Header */}
@@ -136,6 +137,20 @@ export default function Home() {
             Create Market →
           </Link>
         </div>
+        
+        
+        <div className="max-w-l mx-auto p-2 border rounded-xl shadow-sm bg-gray mt-4">
+          <p className="text-sm text-gray-500 mb-2">
+            Install via MCP link
+          </p>
+
+          <div className="flex items-center gap-2 bg-gray-100 rounded-xl px-3 py-2">
+            <code id="mcp-link" className="text-sm text-gray-800 truncate">
+              {mcp_link}
+            </code>
+          </div>
+
+        </div>
 
         {/* Decorative rule */}
         <div
@@ -148,11 +163,6 @@ export default function Home() {
             maxWidth: '24rem',
           }}
         >
-          <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
-          <span style={{ fontFamily: 'var(--font-geist-mono)', fontSize: '0.6rem', letterSpacing: '0.15em', color: 'var(--muted)', textTransform: 'uppercase' }}>
-            Connect to begin
-          </span>
-          <div style={{ flex: 1, height: '1px', background: 'var(--border)' }} />
         </div>
       </main>
     </div>
