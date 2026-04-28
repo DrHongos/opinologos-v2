@@ -4,6 +4,7 @@ import { WalletButton } from '@/components/wallet-button';
 import { MarketGraph } from '@/components/market-graph';
 import { CidRow } from '@/components/cid-row';
 import { MarketStatus } from '@/components/market-status';
+import { AgentHistory } from '@/components/agent-history';
 
 interface Outcome {
   outcomeIndex: number;
@@ -114,6 +115,10 @@ export default async function MarketDetailPage({
 
       <div className="md-graph-wrap">
         <MarketGraph market={market} />
+      </div>
+
+      <div className="md-status-wrap">
+        <AgentHistory slug={slug} />
       </div>
     </div>
   );

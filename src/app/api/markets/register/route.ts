@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql, initSchema } from '@/lib/db';
+import { outcomeTokenIdLocal, LMSR_HOOK_ADDRESS, COLLATERAL_TOKEN, UNIVERSAL_ROUTER, PERMIT2_ADDRESS } from '@/lib/contracts';
+import { getChain } from '@/lib/chain';
 
 let schemaReady = false;
 
@@ -134,6 +136,63 @@ export async function POST(req: NextRequest) {
           label         = EXCLUDED.label,
           position_id   = EXCLUDED.position_id
       `;
+    }
+
+    // Re-pin an enhanced pm-v3 file with osIndex and positionIds
+    if (osIndex && outcomes && Array.isArray(outcomes)) {
+      try {
+        const chain = getChain();
+        const enrichedOutcomes = (outcomes as Outcome[]).map(o => ({
+          id: o.outcomeIndex,
+          label: o.label,
+          positionId: outcomeTokenIdLocal(osIndex as `0x${string}`, o.outcomeIndex).toString(),
+        }));
+
+        const enhancedMarket = {
+          schema: 'pm-v3',
+          id,
+          question,
+          description: description ?? null,
+          createdAt: Math.floor(Date.now() / 1000),
+          endTime: endTime ?? null,
+          outcomes: enrichedOutcomes,
+          resolution: resolution ?? null,
+          oracle: oracle ?? null,
+          attention: attention ?? null,
+          conditions: conditions ?? null,
+          chain: {
+            id: chain.id,
+            name: chain.name,
+            rpcUrl: chain.rpcUrls.default.http[0],
+            explorerUrl: chain.blockExplorers?.default.url ?? '',
+          },
+          contracts: {
+            hook: LMSR_HOOK_ADDRESS,
+            collateral: COLLATERAL_TOKEN,
+            universalRouter: UNIVERSAL_ROUTER,
+            permit2: PERMIT2_ADDRESS,
+          },
+          osIndex,
+        };
+
+        const pinataJwt = process.env.PINATA_JWT;
+        if (pinataJwt) {
+          const pinRes = await fetch('https://api.pinata.cloud/pinning/pinJSONToIPFS', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${pinataJwt}` },
+            body: JSON.stringify({
+              pinataContent: enhancedMarket,
+              pinataMetadata: { name: `${slug}-v3.json` },
+            }),
+          });
+          if (pinRes.ok) {
+            const { IpfsHash } = await pinRes.json();
+            await sql`UPDATE markets SET market_cid = ${IpfsHash} WHERE id = ${id}`;
+          }
+        }
+      } catch {
+        // Non-fatal: enhanced re-pin failed, original market_cid remains
+      }
     }
 
     return NextResponse.json({ slug });

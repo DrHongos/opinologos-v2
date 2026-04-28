@@ -411,6 +411,7 @@ export function MarketGraph({ market }: { market: MarketData }) {
   const [activeOutcome, setActiveOutcome] = useState<Outcome | null>(null);
   const [activeOutcomeOsIndex, setActiveOutcomeOsIndex] = useState<string>(market.os_index);
   const [activeSlot, setActiveSlot] = useState<SlotInfo | null>(null);
+  // this only takes into account leaf prices.. we need another check for the n parent outcomes ()
   const [prices, setPrices] = useState<number[] | null>(null);
   const [sourcePrices, setSourcePrices] = useState<Record<string, number[]>>({});
 
@@ -427,6 +428,7 @@ export function MarketGraph({ market }: { market: MarketData }) {
       })
         .then(bals => {
           const b = bals as bigint[];
+          console.log(`${market.os_index} is ${b}`)
           setPrices(b.map((_, i) => computeImpliedPrice(b, i)));
         })
         .catch(() => {});
@@ -436,7 +438,6 @@ export function MarketGraph({ market }: { market: MarketData }) {
     const sourceOsIndices = market.conditions
       .map(c => c.os_index)
       .filter((oi): oi is string => !!oi);
-
     for (const oi of sourceOsIndices) {
       client.readContract({
         address: LMSR_HOOK_ADDRESS,
@@ -446,6 +447,7 @@ export function MarketGraph({ market }: { market: MarketData }) {
       })
         .then(bals => {
           const b = bals as bigint[];
+          console.log(`${oi} is ${b}`)
           setSourcePrices(prev => ({ ...prev, [oi]: b.map((_, i) => computeImpliedPrice(b, i)) }));
         })
         .catch(() => {});

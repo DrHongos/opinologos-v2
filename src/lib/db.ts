@@ -83,4 +83,53 @@ export async function initSchema() {
   }
 
   await sql`CREATE INDEX IF NOT EXISTS market_tokens_addr_idx ON market_tokens (token_address)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS agent_events (
+      id                  TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      market_id           TEXT NOT NULL REFERENCES markets(id),
+      created_at          TIMESTAMPTZ DEFAULT NOW(),
+      event_type          TEXT NOT NULL,
+      confidence          INTEGER,
+      reasoning           TEXT,
+      sources             TEXT[],
+      payouts             JSONB,
+      tx_hash             TEXT,
+      trade_amount_usdc   NUMERIC,
+      probability_delta   NUMERIC
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS agent_events_market_idx ON agent_events (market_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS agent_events_created_idx ON agent_events (created_at DESC)`;
+}
+
+export interface AgentEventData {
+  confidence?: number;
+  reasoning?: string;
+  sources?: string[];
+  payouts?: number[];
+  txHash?: string;
+  tradeAmountUsdc?: number;
+  probabilityDelta?: number;
+}
+
+export async function insertAgentEvent(
+  marketId: string,
+  eventType: 'resolved' | 'nudged' | 'skipped' | 'error',
+  data: AgentEventData,
+): Promise<void> {
+  await sql`
+    INSERT INTO agent_events (market_id, event_type, confidence, reasoning, sources, payouts, tx_hash, trade_amount_usdc, probability_delta)
+    VALUES (
+      ${marketId},
+      ${eventType},
+      ${data.confidence ?? null},
+      ${data.reasoning ?? null},
+      ${(data.sources ?? null) as unknown as string},
+      ${data.payouts ? JSON.stringify(data.payouts) : null},
+      ${data.txHash ?? null},
+      ${data.tradeAmountUsdc ?? null},
+      ${data.probabilityDelta ?? null}
+    )
+  `;
 }

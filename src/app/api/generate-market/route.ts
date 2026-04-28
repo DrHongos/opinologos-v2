@@ -2,6 +2,13 @@ import { NextRequest } from 'next/server';
 import { createXai, webSearch, xSearch } from '@ai-sdk/xai';
 import { generateText, stepCountIs } from 'ai';
 import { z } from 'zod';
+import { getChain } from '@/lib/chain';
+import {
+  LMSR_HOOK_ADDRESS,
+  COLLATERAL_TOKEN,
+  UNIVERSAL_ROUTER,
+  PERMIT2_ADDRESS,
+} from '@/lib/contracts';
 
 function buildSystemPrompt() {
   const now = new Date();
@@ -25,6 +32,20 @@ This schema will be consumed by autonomous agents performing probabilistic reaso
 }
 
 function buildUserPrompt(question: string) {
+  const chain = getChain();
+  const chainMeta = {
+    id: chain.id,
+    name: chain.name,
+    rpcUrl: chain.rpcUrls.default.http[0],
+    explorerUrl: chain.blockExplorers?.default.url ?? '',
+  };
+  const contracts = {
+    hook: LMSR_HOOK_ADDRESS,
+    collateral: COLLATERAL_TOKEN,
+    universalRouter: UNIVERSAL_ROUTER,
+    permit2: PERMIT2_ADDRESS,
+  };
+
   return `Create an immutable prediction market for:
 
 ${question}
@@ -46,10 +67,10 @@ Attention profile must include:
 - signals: event types that influence the outcome
 - keywords: routing hints
 
-Output raw JSON only — no explanation, no markdown fences:
+Output raw JSON only — no explanation, no markdown fences. Use exactly these chain and contract values (do not modify them):
 
 {
-  "schema": "pm-parent-v2",
+  "schema": "pm-v3",
   "id": "...",
   "question": "...",
   "description": "...",
@@ -58,12 +79,29 @@ Output raw JSON only — no explanation, no markdown fences:
   "outcomes": [{ "id": 0, "label": "...", "description": "..." }],
   "resolution": { "source": "...", "method": "...", "notes": "..." },
   "oracle": "to-be-assigned",
-  "attention": { "entities": [], "topics": [], "signals": [], "keywords": [] }
+  "attention": { "entities": [], "topics": [], "signals": [], "keywords": [] },
+  "chain": ${JSON.stringify(chainMeta)},
+  "contracts": ${JSON.stringify(contracts)},
+  "osIndex": null
 }`;
 }
 
+const ChainSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  rpcUrl: z.string(),
+  explorerUrl: z.string(),
+});
+
+const ContractsSchema = z.object({
+  hook: z.string(),
+  collateral: z.string(),
+  universalRouter: z.string(),
+  permit2: z.string(),
+});
+
 const MarketSchema = z.object({
-  schema: z.literal('pm-parent-v2'),
+  schema: z.literal('pm-v3'),
   id: z.string(),
   question: z.string(),
   description: z.string(),
@@ -88,6 +126,9 @@ const MarketSchema = z.object({
     signals: z.array(z.string()),
     keywords: z.array(z.string()),
   }),
+  chain: ChainSchema,
+  contracts: ContractsSchema,
+  osIndex: z.string().nullable(),
 });
 
 export async function POST(request: NextRequest) {
@@ -120,7 +161,7 @@ export async function POST(request: NextRequest) {
     });
 
     const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/) ?? [null, text];
-    const jsonText = jsonMatch[1].trim();
+    const jsonText = (jsonMatch[1] ?? text).trim();
 
     let parsed: z.infer<typeof MarketSchema>;
     try {
@@ -134,6 +175,7 @@ export async function POST(request: NextRequest) {
     return Response.json({ market: parsed });
   } catch (err) {
     const detail = err instanceof Error
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ? { message: err.message, cause: (err as any).cause, responseBody: (err as any).responseBody }
       : String(err);
     console.error('xai error:', JSON.stringify(detail, null, 2));
