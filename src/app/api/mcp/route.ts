@@ -12,6 +12,18 @@ import {
   parseUsdcToWei, getChainId,
 } from '@/lib/tx-builder';
 
+const ERC6909_ALLOWANCE_ABI = [{
+  name: 'allowance',
+  type: 'function',
+  inputs: [
+    { name: 'owner', type: 'address' },
+    { name: 'spender', type: 'address' },
+    { name: 'id', type: 'uint256' },
+  ],
+  outputs: [{ name: '', type: 'uint256' }],
+  stateMutability: 'view',
+}] as const;
+
 // ── Server factory (stateless per-request) ────────────────────────────────────
 
 function createMcpServer() {
@@ -23,12 +35,14 @@ function createMcpServer() {
   // ── list_markets ──────────────────────────────────────────────────────────
   server.registerTool(
     'list_markets',
-    'Search and list prediction markets. Returns slugs, questions, end times, and current resolution status.',
     {
-      query:   z.string().optional().describe('Full-text search query'),
-      topic:   z.string().optional().describe('Filter by topic (e.g. "politics", "crypto")'),
-      entity:  z.string().optional().describe('Filter by entity (e.g. "Trump", "Bitcoin")'),
-      limit:   z.number().int().min(1).max(50).optional().describe('Max results (default 10)'),
+      description: 'Search and list prediction markets. Returns slugs, questions, end times, and current resolution status.',
+      inputSchema: {
+        query:   z.string().optional().describe('Full-text search query'),
+        topic:   z.string().optional().describe('Filter by topic (e.g. "politics", "crypto")'),
+        entity:  z.string().optional().describe('Filter by entity (e.g. "Trump", "Bitcoin")'),
+        limit:   z.number().int().min(1).max(50).optional().describe('Max results (default 10)'),
+      },
     },
     async ({ query, topic, entity, limit = 10 }) => {
       let rows;
@@ -75,8 +89,10 @@ function createMcpServer() {
   // ── read_market ───────────────────────────────────────────────────────────
   server.registerTool(
     'read_market',
-    'Read full market spec and live on-chain state (prices, balances, resolved status). Use this before building transactions.',
-    { slug: z.string().describe('Market slug (e.g. "will-bitcoin-reach-100k-by-2025")') },
+    {
+      description: 'Read full market spec and live on-chain state (prices, balances, resolved status). Use this before building transactions.',
+      inputSchema: { slug: z.string().describe('Market slug (e.g. "will-bitcoin-reach-100k-by-2025")') },
+    },
     async ({ slug }) => {
       const { rows } = await sql`
         SELECT m.*, COALESCE(json_agg(json_build_object(
@@ -113,10 +129,12 @@ function createMcpServer() {
   // ── get_price ─────────────────────────────────────────────────────────────
   server.registerTool(
     'get_price',
-    'Get current FPMM implied probability for market outcomes. Returns probabilities 0-1 per outcome index.',
     {
-      slug: z.string(),
-      outcomeIndex: z.number().int().optional().describe('Specific outcome index, or omit for all'),
+      description: 'Get current FPMM implied probability for market outcomes. Returns probabilities 0-1 per outcome index.',
+      inputSchema: {
+        slug: z.string(),
+        outcomeIndex: z.number().int().optional().describe('Specific outcome index, or omit for all'),
+      },
     },
     async ({ slug, outcomeIndex }) => {
       const { rows } = await sql`SELECT os_index FROM markets WHERE slug = ${slug} LIMIT 1`;
@@ -139,11 +157,13 @@ function createMcpServer() {
   // ── calc_buy_amount ───────────────────────────────────────────────────────
   server.registerTool(
     'calc_buy_amount',
-    'Simulate how many outcome tokens a user receives for a given USDC investment (after fees). Use this before building a buy transaction to show the user the expected return.',
     {
-      slug: z.string(),
-      outcomeIndex: z.number().int().describe('Outcome index (linearIdx) to buy'),
-      amountUsdc: z.string().describe('Collateral to invest in USDC (e.g. "5.0")'),
+      description: 'Simulate how many outcome tokens a user receives for a given USDC investment (after fees). Use this before building a buy transaction to show the user the expected return.',
+      inputSchema: {
+        slug: z.string(),
+        outcomeIndex: z.number().int().describe('Outcome index (linearIdx) to buy'),
+        amountUsdc: z.string().describe('Collateral to invest in USDC (e.g. "5.0")'),
+      },
     },
     async ({ slug, outcomeIndex, amountUsdc }) => {
       const { rows } = await sql`SELECT os_index FROM markets WHERE slug = ${slug} LIMIT 1`;
@@ -161,11 +181,13 @@ function createMcpServer() {
   // ── calc_sell_amount ──────────────────────────────────────────────────────
   server.registerTool(
     'calc_sell_amount',
-    'Simulate how many outcome tokens a user must sell to receive a given USDC amount back (after fees). Use this before building a sell transaction.',
     {
-      slug: z.string(),
-      outcomeIndex: z.number().int().describe('Outcome index (linearIdx) to sell'),
-      returnAmountUsdc: z.string().describe('Collateral to receive in USDC (e.g. "5.0")'),
+      description: 'Simulate how many outcome tokens a user must sell to receive a given USDC amount back (after fees). Use this before building a sell transaction.',
+      inputSchema: {
+        slug: z.string(),
+        outcomeIndex: z.number().int().describe('Outcome index (linearIdx) to sell'),
+        returnAmountUsdc: z.string().describe('Collateral to receive in USDC (e.g. "5.0")'),
+      },
     },
     async ({ slug, outcomeIndex, returnAmountUsdc }) => {
       const { rows } = await sql`SELECT os_index FROM markets WHERE slug = ${slug} LIMIT 1`;
@@ -183,10 +205,12 @@ function createMcpServer() {
   // ── get_token_ids ─────────────────────────────────────────────────────────
   server.registerTool(
     'get_token_ids',
-    'Return the ERC-6909 token IDs for outcome tokens and the LP token of a market. Use these IDs to query balanceOf on the hook contract.',
     {
-      slug: z.string(),
-      outcomeIndexes: z.array(z.number().int()).optional().describe('Outcome indexes to compute IDs for; omit for all'),
+      description: 'Return the ERC-6909 token IDs for outcome tokens and the LP token of a market. Use these IDs to query balanceOf on the hook contract.',
+      inputSchema: {
+        slug: z.string(),
+        outcomeIndexes: z.array(z.number().int()).optional().describe('Outcome indexes to compute IDs for; omit for all'),
+      },
     },
     async ({ slug, outcomeIndexes }) => {
       const { rows } = await sql`
@@ -223,10 +247,12 @@ function createMcpServer() {
   // ── get_fees_withdrawable ─────────────────────────────────────────────────
   server.registerTool(
     'get_fees_withdrawable',
-    'Return the amount of fees (in collateral wei) claimable by a liquidity provider for a given market.',
     {
-      slug: z.string(),
-      account: z.string().describe('LP wallet address (0x...)'),
+      description: 'Return the amount of fees (in collateral wei) claimable by a liquidity provider for a given market.',
+      inputSchema: {
+        slug: z.string(),
+        account: z.string().describe('LP wallet address (0x...)'),
+      },
     },
     async ({ slug, account }) => {
       const { rows } = await sql`SELECT os_index FROM markets WHERE slug = ${slug} LIMIT 1`;
@@ -244,11 +270,13 @@ function createMcpServer() {
   // ── check_operator ────────────────────────────────────────────────────────
   server.registerTool(
     'check_operator',
-    'Check whether a given operator address is approved to burn outcome tokens on behalf of an owner. Sells require the hook contract to be set as operator. Also checks ERC-6909 token allowance for a specific token ID.',
     {
-      owner: z.string().describe('Token owner address (0x...)'),
-      operator: z.string().describe('Operator address to check — for sells this should be the hook contract address'),
-      tokenId: z.string().optional().describe('(Optional) ERC-6909 token ID to check allowance for'),
+      description: 'Check whether a given operator address is approved to burn outcome tokens on behalf of an owner. Sells require the hook contract to be set as operator. Also checks ERC-6909 token allowance for a specific token ID.',
+      inputSchema: {
+        owner: z.string().describe('Token owner address (0x...)'),
+        operator: z.string().describe('Operator address to check — for sells this should be the hook contract address'),
+        tokenId: z.string().optional().describe('(Optional) ERC-6909 token ID to check allowance for'),
+      },
     },
     async ({ owner, operator, tokenId }) => {
       const pc = getPublicClient();
@@ -257,7 +285,7 @@ function createMcpServer() {
       ];
       if (tokenId) {
         calls.push(
-          pc.readContract({ address: LMSR_HOOK_ADDRESS, abi: FPMM_ABI, functionName: 'allowance', args: [owner as `0x${string}`, operator as `0x${string}`, BigInt(tokenId)] }),
+          pc.readContract({ address: LMSR_HOOK_ADDRESS, abi: ERC6909_ALLOWANCE_ABI, functionName: 'allowance', args: [owner as `0x${string}`, operator as `0x${string}`, BigInt(tokenId)] }),
         );
       }
       const [isOp, allowanceAmt] = await Promise.all(calls).catch(() => [null, null]);
@@ -276,10 +304,12 @@ function createMcpServer() {
   // ── get_user_positions ────────────────────────────────────────────────────
   server.registerTool(
     'get_user_positions',
-    'Return all ERC-6909 token balances for a user in a given market: each outcome token balance and the LP token balance. Use this before planning any sell, merge, or split strategy to know what the user currently holds.',
     {
-      slug: z.string(),
-      account: z.string().describe('User wallet address (0x...)'),
+      description: 'Return all ERC-6909 token balances for a user in a given market: each outcome token balance and the LP token balance. Use this before planning any sell, merge, or split strategy to know what the user currently holds.',
+      inputSchema: {
+        slug: z.string(),
+        account: z.string().describe('User wallet address (0x...)'),
+      },
     },
     async ({ slug, account }) => {
       const { rows } = await sql`
@@ -328,8 +358,10 @@ function createMcpServer() {
   // ── get_condition_tree ────────────────────────────────────────────────────
   server.registerTool(
     'get_condition_tree',
-    'Return the full condition structure of a mixed market: each condition\'s slot count, resolution status, and the sub-outcome-space index (subOsIndex) to use in build_split_position_tx / build_merge_position_tx. For a market with N conditions, stripping condition[i] gives subOsIndex[i] — the OS containing the remaining N-1 conditions. Use this tool first when planning any conditional entry strategy.',
-    { slug: z.string() },
+    {
+      description: 'Return the full condition structure of a mixed market: each condition\'s slot count, resolution status, and the sub-outcome-space index (subOsIndex) to use in build_split_position_tx / build_merge_position_tx. For a market with N conditions, stripping condition[i] gives subOsIndex[i] — the OS containing the remaining N-1 conditions. Use this tool first when planning any conditional entry strategy.',
+      inputSchema: { slug: z.string() },
+    },
     async ({ slug }) => {
       const { rows } = await sql`SELECT os_index, collateral, conditions FROM markets WHERE slug = ${slug} LIMIT 1`;
       if (!rows.length || !rows[0].os_index) return { content: [{ type: 'text', text: '{"error":"Market not found"}' }] };
@@ -337,7 +369,6 @@ function createMcpServer() {
       const { os_index: osIndex, collateral, conditions: conditionsJson } = rows[0];
       const pc = getPublicClient();
 
-      // Fall back to on-chain if DB conditions column is empty
       let conditionIds: string[];
       if (conditionsJson && Array.isArray(conditionsJson) && conditionsJson.length > 0) {
         conditionIds = conditionsJson.map((c: { id: string } | string) => (typeof c === 'string' ? c : c.id));
@@ -371,8 +402,10 @@ function createMcpServer() {
   // ── get_outcome_matrix ────────────────────────────────────────────────────
   server.registerTool(
     'get_outcome_matrix',
-    'Decode each linear outcome index of a market into its per-condition slot assignments. For a market with conditions [C0(2 slots), C1(3 slots)], linearIdx 4 = C0:slot0, C1:slot2. Use this to identify which outcome indexes correspond to a desired conditional scenario (e.g. "C0 resolves to slot 1 regardless of C1").',
-    { slug: z.string() },
+    {
+      description: 'Decode each linear outcome index of a market into its per-condition slot assignments. For a market with conditions [C0(2 slots), C1(3 slots)], linearIdx 4 = C0:slot0, C1:slot2. Use this to identify which outcome indexes correspond to a desired conditional scenario (e.g. "C0 resolves to slot 1 regardless of C1").',
+      inputSchema: { slug: z.string() },
+    },
     async ({ slug }) => {
       const { rows } = await sql`
         SELECT m.os_index, m.collateral, m.conditions,
@@ -384,7 +417,7 @@ function createMcpServer() {
       `;
       if (!rows.length || !rows[0].os_index) return { content: [{ type: 'text', text: '{"error":"Market not found"}' }] };
 
-      const { os_index: osIndex, collateral, conditions: conditionsJson, outcomes } = rows[0];
+      const { os_index: osIndex, conditions: conditionsJson, outcomes } = rows[0];
       const pc = getPublicClient();
 
       let conditionIds: string[];
@@ -428,13 +461,15 @@ function createMcpServer() {
   // ── build_trade_tx ────────────────────────────────────────────────────────
   server.registerTool(
     'build_trade_tx',
-    'Build unsigned transactions to buy or sell outcome tokens via the FPMM. Returns a sequence of EVM transactions to sign and submit in order. For mixed markets, prefer build_split_collateral_tx + sell unwanted outcomes over direct trades on leaf positions for better price efficiency.',
     {
-      slug: z.string(),
-      outcomeIndex: z.number().int().describe('Outcome index to trade'),
-      direction: z.enum(['buy', 'sell']),
-      amountUsdc: z.string().describe('Amount in USDC (e.g. "5.0")'),
-      from: z.string().describe('Sender address (0x...)'),
+      description: 'Build unsigned transactions to buy or sell outcome tokens via the FPMM. Returns a sequence of EVM transactions to sign and submit in order. For mixed markets, prefer build_split_collateral_tx + sell unwanted outcomes over direct trades on leaf positions for better price efficiency.',
+      inputSchema: {
+        slug: z.string(),
+        outcomeIndex: z.number().int().describe('Outcome index to trade'),
+        direction: z.enum(['buy', 'sell']),
+        amountUsdc: z.string().describe('Amount in USDC (e.g. "5.0")'),
+        from: z.string().describe('Sender address (0x...)'),
+      },
     },
     async ({ slug, outcomeIndex, direction, amountUsdc, from }) => {
       const { rows } = await sql`SELECT os_index FROM markets WHERE slug = ${slug} LIMIT 1`;
@@ -454,8 +489,10 @@ function createMcpServer() {
   // ── build_split_collateral_tx ─────────────────────────────────────────────
   server.registerTool(
     'build_split_collateral_tx',
-    'Build unsigned transactions to split collateral into equal amounts of all outcome tokens.',
-    { slug: z.string(), amountUsdc: z.string(), from: z.string() },
+    {
+      description: 'Build unsigned transactions to split collateral into equal amounts of all outcome tokens.',
+      inputSchema: { slug: z.string(), amountUsdc: z.string(), from: z.string() },
+    },
     async ({ slug, amountUsdc }) => {
       const { rows } = await sql`SELECT os_index FROM markets WHERE slug = ${slug} LIMIT 1`;
       if (!rows.length || !rows[0].os_index) return { content: [{ type: 'text', text: '{"error":"Market not found"}' }] };
@@ -467,8 +504,10 @@ function createMcpServer() {
   // ── build_merge_collateral_tx ─────────────────────────────────────────────
   server.registerTool(
     'build_merge_collateral_tx',
-    'Build unsigned transactions to merge equal amounts of all outcome tokens back into collateral.',
-    { slug: z.string(), amountUsdc: z.string(), from: z.string() },
+    {
+      description: 'Build unsigned transactions to merge equal amounts of all outcome tokens back into collateral.',
+      inputSchema: { slug: z.string(), amountUsdc: z.string(), from: z.string() },
+    },
     async ({ slug, amountUsdc }) => {
       const { rows } = await sql`SELECT os_index FROM markets WHERE slug = ${slug} LIMIT 1`;
       if (!rows.length || !rows[0].os_index) return { content: [{ type: 'text', text: '{"error":"Market not found"}' }] };
@@ -480,13 +519,15 @@ function createMcpServer() {
   // ── build_split_position_tx ───────────────────────────────────────────────
   server.registerTool(
     'build_split_position_tx',
-    'Build unsigned transactions to split a parent outcome position into leaf outcomes of a deeper condition. Conditional entry strategy: call get_condition_tree to get the subOsIndex and condition ID for the condition you want to strip, call get_outcome_matrix to find which parentLinearIdx values match your target scenario, then split those positions and sell the leaves you do not want.',
     {
-      slug: z.string(),
-      parentLinearIdx: z.number().int().describe('Linear outcome index in the parent OS to split'),
-      condition: z.string().describe('Condition ID (bytes32 hex) to split on — from get_condition_tree'),
-      amount: z.string().describe('Amount of parent outcome tokens to split (in units, e.g. "10.0")'),
-      from: z.string(),
+      description: 'Build unsigned transactions to split a parent outcome position into leaf outcomes of a deeper condition. Conditional entry strategy: call get_condition_tree to get the subOsIndex and condition ID for the condition you want to strip, call get_outcome_matrix to find which parentLinearIdx values match your target scenario, then split those positions and sell the leaves you do not want.',
+      inputSchema: {
+        slug: z.string(),
+        parentLinearIdx: z.number().int().describe('Linear outcome index in the parent OS to split'),
+        condition: z.string().describe('Condition ID (bytes32 hex) to split on — from get_condition_tree'),
+        amount: z.string().describe('Amount of parent outcome tokens to split (in units, e.g. "10.0")'),
+        from: z.string(),
+      },
     },
     async ({ slug, parentLinearIdx, condition, amount }) => {
       const { rows } = await sql`SELECT os_index FROM markets WHERE slug = ${slug} LIMIT 1`;
@@ -499,13 +540,15 @@ function createMcpServer() {
   // ── build_merge_position_tx ───────────────────────────────────────────────
   server.registerTool(
     'build_merge_position_tx',
-    'Build unsigned transactions to merge leaf outcome positions back into a parent outcome. Reverse of build_split_position_tx. Use get_condition_tree for the condition ID and get_user_positions to confirm the user holds the required leaf token balances before merging.',
     {
-      slug: z.string(),
-      parentLinearIdx: z.number().int(),
-      condition: z.string().describe('Condition ID (bytes32 hex)'),
-      amount: z.string(),
-      from: z.string(),
+      description: 'Build unsigned transactions to merge leaf outcome positions back into a parent outcome. Reverse of build_split_position_tx. Use get_condition_tree for the condition ID and get_user_positions to confirm the user holds the required leaf token balances before merging.',
+      inputSchema: {
+        slug: z.string(),
+        parentLinearIdx: z.number().int(),
+        condition: z.string().describe('Condition ID (bytes32 hex)'),
+        amount: z.string(),
+        from: z.string(),
+      },
     },
     async ({ slug, parentLinearIdx, condition, amount }) => {
       const { rows } = await sql`SELECT os_index FROM markets WHERE slug = ${slug} LIMIT 1`;
@@ -518,8 +561,10 @@ function createMcpServer() {
   // ── build_redeem_tx ───────────────────────────────────────────────────────
   server.registerTool(
     'build_redeem_tx',
-    'Build unsigned transactions to redeem winning outcome tokens for collateral after the market is resolved.',
-    { slug: z.string(), from: z.string() },
+    {
+      description: 'Build unsigned transactions to redeem winning outcome tokens for collateral after the market is resolved.',
+      inputSchema: { slug: z.string(), from: z.string() },
+    },
     async ({ slug }) => {
       const { rows } = await sql`SELECT os_index FROM markets WHERE slug = ${slug} LIMIT 1`;
       if (!rows.length || !rows[0].os_index) return { content: [{ type: 'text', text: '{"error":"Market not found"}' }] };
@@ -530,8 +575,10 @@ function createMcpServer() {
   // ── build_add_liquidity_tx ────────────────────────────────────────────────
   server.registerTool(
     'build_add_liquidity_tx',
-    'Build unsigned transactions to add collateral as liquidity to a market pool. You receive LP tokens.',
-    { slug: z.string(), amountUsdc: z.string(), from: z.string() },
+    {
+      description: 'Build unsigned transactions to add collateral as liquidity to a market pool. You receive LP tokens.',
+      inputSchema: { slug: z.string(), amountUsdc: z.string(), from: z.string() },
+    },
     async ({ slug, amountUsdc }) => {
       const { rows } = await sql`SELECT os_index FROM markets WHERE slug = ${slug} LIMIT 1`;
       if (!rows.length || !rows[0].os_index) return { content: [{ type: 'text', text: '{"error":"Market not found"}' }] };
@@ -542,8 +589,10 @@ function createMcpServer() {
   // ── build_remove_liquidity_tx ─────────────────────────────────────────────
   server.registerTool(
     'build_remove_liquidity_tx',
-    'Build unsigned transactions to burn LP tokens and withdraw your share of the market pool.',
-    { slug: z.string(), lpAmount: z.string(), from: z.string() },
+    {
+      description: 'Build unsigned transactions to burn LP tokens and withdraw your share of the market pool.',
+      inputSchema: { slug: z.string(), lpAmount: z.string(), from: z.string() },
+    },
     async ({ slug, lpAmount }) => {
       const { rows } = await sql`SELECT os_index FROM markets WHERE slug = ${slug} LIMIT 1`;
       if (!rows.length || !rows[0].os_index) return { content: [{ type: 'text', text: '{"error":"Market not found"}' }] };
@@ -554,8 +603,10 @@ function createMcpServer() {
   // ── build_withdraw_fees_tx ────────────────────────────────────────────────
   server.registerTool(
     'build_withdraw_fees_tx',
-    'Build unsigned transactions to withdraw trading fees earned as a liquidity provider.',
-    { slug: z.string(), from: z.string() },
+    {
+      description: 'Build unsigned transactions to withdraw trading fees earned as a liquidity provider.',
+      inputSchema: { slug: z.string(), from: z.string() },
+    },
     async ({ slug }) => {
       const { rows } = await sql`SELECT os_index FROM markets WHERE slug = ${slug} LIMIT 1`;
       if (!rows.length || !rows[0].os_index) return { content: [{ type: 'text', text: '{"error":"Market not found"}' }] };

@@ -463,6 +463,9 @@ export function ConditionPanel({ condition, osIndex, ptokenAddress, onClose, onT
             </span>
           </div>
 
+          <div className="chain-guard">
+            if the market is closed you need to redeem your fees <b>before</b> your funds. Otherwise <b>will be lost</b>
+          </div>
           {feesWithdrawable !== null && feesWithdrawable > 0n && (
             <button
               className="mg-panel__action"
