@@ -104,9 +104,9 @@ function buildResult(selector: string, cid: string | null): `0x${string}` {
   return encodeAbiParameters([{ type: 'string' }], [`ipfs://${cid}`]);
 }
 
-export async function GET(_req: NextRequest, { params }: { params: { params: string[] } }) {
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ params: string[] }> }) {
   try {
-    const { params: segments } = params;
+    const { params: segments } = await params;
     if (!segments || segments.length < 2) {
       return NextResponse.json({ error: 'Bad request' }, { status: 400 });
     }
@@ -190,6 +190,6 @@ export async function GET(_req: NextRequest, { params }: { params: { params: str
   }
 }
 
-export async function POST(req: NextRequest, context: { params: { params: string[] } }) {
+export async function POST(req: NextRequest, context: { params: Promise<{ params: string[] }> }) {
   return GET(req, context);
 }
