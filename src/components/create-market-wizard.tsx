@@ -168,6 +168,30 @@ function ActionBar({
   );
 }
 
+// fix for returned timestamps errors (grok returns always wrong year)
+function normalizeToCurrentYear(unixTimestamp: number) {
+  // Normalize to milliseconds
+  const tsMs =
+    unixTimestamp < 1e12 ? unixTimestamp * 1000 : unixTimestamp;
+
+  const date = new Date(tsMs);
+
+  const inputYear = date.getFullYear();
+  const currentYear = new Date().getFullYear();
+
+  // If the input year is in the past, update it
+  if (inputYear < currentYear) {
+    date.setFullYear(currentYear);
+  }
+
+  // Return as Unix timestamp (seconds)
+  return Math.floor(date.getTime() / 1000);
+}
+// clean grok injected text
+function cleanGrokText(text: string) {
+  return text.replace(/<grok:render[\s\S]*?<\/grok:render>/g, "");
+}
+
 // ── Main wizard ────────────────────────────────────────────────────────────────
 
 export function CreateMarketWizard() {
@@ -203,11 +227,180 @@ export function CreateMarketWizard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Independent retry state for Pinata/register calls
+  const [ipfsLoading, setIpfsLoading] = useState(false);
+  const [ipfsError, setIpfsError] = useState('');
+  const [publishLoading, setPublishLoading] = useState(false);
+  const [publishError, setPublishError] = useState('');
+  const [registerLoading, setRegisterLoading] = useState(false);
+  const [registerError, setRegisterError] = useState('');
+
+  // ── IPFS / register helpers ───────────────────────────────────────────────
+
+  // Pins the question-level JSON. Called both from handleGenerate (blocking,
+  // loading=true) and from the manual retry button (ipfsLoading=true).
+  // Takes m as an argument so it works regardless of React state flush timing.
+  async function uploadQuestionToIpfs(m: GeneratedMarket) {
+    setIpfsLoading(true);
+    setIpfsError('');
+    try {
+      const upRes = await fetch('/api/upload-market', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: m, name: `market-${m.id}.json` }),
+      });
+      const upData = await upRes.json();
+      if (!upRes.ok || upData.error) throw new Error(upData.error ?? 'IPFS upload failed');
+      const cid = upData.cid as string;
+      setQuestionCid(cid);
+      const qId = keccak256(new TextEncoder().encode(cid));
+      setQuestionId(qId);
+      setStep(2);
+    } catch (e) {
+      setIpfsError(e instanceof Error ? e.message : 'IPFS upload failed');
+    } finally {
+      setIpfsLoading(false);
+    }
+  }
+
+  // Pins the complete market JSON and then registers it. Called after the OS
+  // is created on-chain; intentionally fire-and-forget at the call site so a
+  // Pinata outage never blocks step 4. Retry buttons appear on failure.
+  async function runPublishAndRegister(osIdx: Hash, tokenIds: bigint[], mkt: GeneratedMarket, qCid: string, cId: Hash) {
+    const outcomeMarkets = mkt.outcomes.map((o, i) => ({
+      outcomeIndex: i,
+      label: o.label,
+      erc6909Id: tokenIds[i] !== undefined
+        ? ('0x' + tokenIds[i].toString(16).padStart(64, '0'))
+        : null,
+    }));
+
+    const finalMarket = {
+      ...mkt,
+      markets: outcomeMarkets,
+      probabilityModel: {
+        type: 'fpmm',
+        osIndex: osIdx,
+        conditionId: cId,
+        collateral: COLLATERAL_TOKEN,
+        hook: LMSR_HOOK_ADDRESS,
+      },
+      ipfs: { questionCid: qCid, marketCid: null },
+    };
+
+    setPublishLoading(true);
+    setPublishError('');
+    let cid: string;
+    try {
+      const uploadRes = await fetch('/api/upload-market', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: finalMarket, name: `market-complete-${mkt.id}.json` }),
+      });
+      const uploadData = await uploadRes.json();
+      if (!uploadRes.ok || uploadData.error) throw new Error(uploadData.error ?? 'Upload failed');
+      cid = uploadData.cid as string;
+      setFinalCid(cid);
+    } catch (e) {
+      setPublishError(e instanceof Error ? e.message : 'IPFS upload failed');
+      setPublishLoading(false);
+      return;
+    }
+    setPublishLoading(false);
+
+    setRegisterLoading(true);
+    setRegisterError('');
+    try {
+      const regRes = await fetch('/api/markets/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: mkt.id,
+          question: mkt.question,
+          questionCid: qCid,
+          marketCid: cid,
+          osIndex: osIdx,
+          conditionId: cId,
+          description: mkt.description,
+          endTime: mkt.endTime,
+          oracle: mkt.oracle,
+          collateral: COLLATERAL_TOKEN,
+          hookAddress: LMSR_HOOK_ADDRESS,
+          resolution: mkt.resolution,
+          attention: mkt.attention,
+          outcomes: outcomeMarkets,
+        }),
+      });
+      if (regRes.ok) {
+        const { slug } = await regRes.json();
+        setEnsSlug(slug as string);
+      } else {
+        throw new Error('Registration failed');
+      }
+    } catch (e) {
+      setRegisterError(e instanceof Error ? e.message : 'Registration failed');
+    } finally {
+      setRegisterLoading(false);
+    }
+  }
+
+  async function handleRetryRegister() {
+    if (!market || !osIndex || !finalCid || !questionCid || !conditionId) return;
+    const outcomeMarkets = market.outcomes.map((o, i) => ({
+      outcomeIndex: i,
+      label: o.label,
+      erc6909Id: outcomeTokenIds[i] !== undefined
+        ? ('0x' + outcomeTokenIds[i].toString(16).padStart(64, '0'))
+        : null,
+    }));
+    setRegisterLoading(true);
+    setRegisterError('');
+    try {
+      const regRes = await fetch('/api/markets/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: market.id,
+          question: market.question,
+          questionCid,
+          marketCid: finalCid,
+          osIndex,
+          conditionId,
+          description: market.description,
+          endTime: market.endTime,
+          oracle: market.oracle,
+          collateral: COLLATERAL_TOKEN,
+          hookAddress: LMSR_HOOK_ADDRESS,
+          resolution: market.resolution,
+          attention: market.attention,
+          outcomes: outcomeMarkets,
+        }),
+      });
+      if (regRes.ok) {
+        const { slug } = await regRes.json();
+        setEnsSlug(slug as string);
+      } else {
+        throw new Error('Registration failed');
+      }
+    } catch (e) {
+      setRegisterError(e instanceof Error ? e.message : 'Registration failed');
+    } finally {
+      setRegisterLoading(false);
+    }
+  }
+
+  function handleRetryPublish() {
+    if (!market || !osIndex || !outcomeTokenIds.length || !questionCid || !conditionId) return;
+    runPublishAndRegister(osIndex, outcomeTokenIds, market, questionCid, conditionId);
+  }
+
   // ── Step handlers ─────────────────────────────────────────────────────────
 
   async function handleGenerate() {
     setLoading(true);
     setError('');
+    setIpfsError('');
+    let generated: GeneratedMarket | null = null;
     try {
       const genRes = await fetch('/api/generate-market', {
         method: 'POST',
@@ -217,30 +410,19 @@ export function CreateMarketWizard() {
       const genData = await genRes.json();
       if (!genRes.ok || genData.error) throw new Error(genData.error ?? 'Generation failed');
       const m = genData.market as GeneratedMarket;
+      m.description = cleanGrokText(m.description);
+      m.endTime = normalizeToCurrentYear(m.endTime);
       setMarket(m);
       setInitialWeights(m.outcomes.map(() => 1));
-
-      // Auto-pin to IPFS immediately after generation
-      const upRes = await fetch('/api/upload-market', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: m, name: `market-${m.id}.json` }),
-      });
-      const upData = await upRes.json();
-      if (!upRes.ok || upData.error) throw new Error(upData.error ?? 'IPFS upload failed');
-
-      const cid = upData.cid as string;
-      setQuestionCid(cid);
-      // questionId = keccak256 of CID UTF-8 bytes — oracle uses same encoding for reportPayouts
-      const qId = keccak256(new TextEncoder().encode(cid));
-      setQuestionId(qId);
-
-      setStep(2);
+      generated = m;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
+    // IPFS upload runs after loading clears. Pass local var — state may not
+    // have flushed yet. If it fails, ipfsError is set and a retry button appears.
+    if (generated) await uploadQuestionToIpfs(generated);
   }
 
   async function handlePrepareCondition() {
@@ -315,64 +497,10 @@ export function CreateMarketWizard() {
       )) as bigint[];
       setOutcomeTokenIds(tokenIds);
 
-      // Auto-publish: build complete market JSON and pin to IPFS
-      const outcomeMarkets = market.outcomes.map((o, i) => ({
-        outcomeIndex: i,
-        label: o.label,
-        erc6909Id: tokenIds[i] !== undefined
-          ? ('0x' + tokenIds[i].toString(16).padStart(64, '0'))
-          : null,
-      }));
-
-      const finalMarket = {
-        ...market,
-        markets: outcomeMarkets,
-        probabilityModel: {
-          type: 'fpmm',
-          osIndex: osIdx,
-          conditionId,
-          collateral: COLLATERAL_TOKEN,
-          hook: LMSR_HOOK_ADDRESS,
-        },
-        ipfs: { questionCid, marketCid: null },
-      };
-
-      const uploadRes = await fetch('/api/upload-market', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ data: finalMarket, name: `market-complete-${market.id}.json` }),
-      });
-      const uploadData = await uploadRes.json();
-      if (!uploadRes.ok || uploadData.error) throw new Error(uploadData.error ?? 'Upload failed');
-      const cid = uploadData.cid as string;
-      setFinalCid(cid);
-
-      const regRes = await fetch('/api/markets/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: market.id,
-          question: market.question,
-          questionCid,
-          marketCid: cid,
-          osIndex: osIdx,
-          conditionId,
-          description: market.description,
-          endTime: market.endTime,
-          oracle: market.oracle,
-          collateral: COLLATERAL_TOKEN,
-          hookAddress: LMSR_HOOK_ADDRESS,
-          resolution: market.resolution,
-          attention: market.attention,
-          outcomes: outcomeMarkets,
-        }),
-      });
-      if (regRes.ok) {
-        const { slug } = await regRes.json();
-        setEnsSlug(slug as string);
-      }
-
+      // Advance immediately — publish + register run in background so a
+      // Pinata outage never blocks the funding step. Retry buttons appear on failure.
       setStep(4);
+      runPublishAndRegister(osIdx as Hash, tokenIds, market, questionCid, conditionId);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Transaction failed');
     } finally {
@@ -438,6 +566,46 @@ export function CreateMarketWizard() {
 
   const chain = getChain();
 
+  // Banner for background publish/register status (shown in steps 4 and 5)
+  const publishStatusBanner = step >= 4 && (publishLoading || publishError || registerLoading || registerError) ? (
+    <div className="cmw__publish-status">
+      {publishLoading && (
+        <div className="cmw__status-row">
+          <span className="cmf__spinner" /> Uploading market to IPFS…
+        </div>
+      )}
+      {publishError && (
+        <div className="cmw__status-row cmw__error">
+          <span>✕ IPFS: {publishError}</span>
+          <button
+            className="cmf__submit cmw__retry-btn"
+            onClick={handleRetryPublish}
+            disabled={publishLoading || registerLoading}
+          >
+            Retry upload
+          </button>
+        </div>
+      )}
+      {registerLoading && (
+        <div className="cmw__status-row">
+          <span className="cmf__spinner" /> Registering market…
+        </div>
+      )}
+      {registerError && !publishError && (
+        <div className="cmw__status-row cmw__error">
+          <span>✕ Register: {registerError}</span>
+          <button
+            className="cmf__submit cmw__retry-btn"
+            onClick={handleRetryRegister}
+            disabled={registerLoading}
+          >
+            Retry registration
+          </button>
+        </div>
+      )}
+    </div>
+  ) : null;
+
   return (
     <div className="cmw">
       <StepIndicator current={step} />
@@ -448,8 +616,8 @@ export function CreateMarketWizard() {
         </div>
       )}
 
-      {/* Step 1 — Generate + auto-upload */}
-      {step === 1 && (
+      {/* Step 1a — Generate form (no market yet) */}
+      {step === 1 && !market && (
         <div className="cmw__body">
           <h2 className="cmw__step-title">Describe your market</h2>
           <p className="cmw__step-sub">
@@ -468,6 +636,39 @@ export function CreateMarketWizard() {
         </div>
       )}
 
+      {/* Step 1b — Market generated but IPFS upload failed; retry without re-generating */}
+      {step === 1 && market && !questionCid && (
+        <div className="cmw__body">
+          <h2 className="cmw__step-title">Market generated — pinning to IPFS</h2>
+          <p className="cmw__step-sub">
+            The schema is ready. Pinning to IPFS is required before continuing.
+          </p>
+          <div className="cmw__info-grid">
+            <Field label="Question" value={market.question} mono={false} />
+            <Field label="endTime" value={new Date(market.endTime * 1000).toLocaleDateString()} />
+            {market.outcomes.map((o) => (
+              <Field key={o.id} label={`Outcome ${o.id}`} value={o.label} mono={false} />
+            ))}
+          </div>
+          {ipfsError && <ErrorBanner msg={ipfsError} />}
+          <ActionBar
+            label="Retry IPFS upload"
+            onClick={() => uploadQuestionToIpfs(market)}
+            loading={ipfsLoading}
+          />
+          <div className="cmw__actions">
+            <button
+              className="cmf__submit"
+              style={{ opacity: 0.6 }}
+              onClick={() => { setMarket(null); setIpfsError(''); setError(''); }}
+              disabled={ipfsLoading}
+            >
+              ← Start over
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Step 2 — prepareCondition */}
       {step === 2 && market && questionId && (
         <div className="cmw__body">
@@ -477,14 +678,23 @@ export function CreateMarketWizard() {
           </p>
 
           <div className="cmw__info-grid">
+            <Field label="endTime" value={new Date(market.endTime * 1000).toLocaleDateString()} />
+            <Field label="Question" value={market.question} />
+            <Field label="Description" value={market.description} />
+            {market.outcomes.map((o) => {
+              return <Field key={o.id} label={o.id.toString()} value={o.label} />
+            })}
+            <Field label="Source" value={market.resolution.source} />
+            <Field label="Criteria" value={market.resolution.method} />
+
             <Field label="IPFS CID" value={questionCid} />
             <Field label="questionId (bytes32)" value={questionId} />
             <Field label="oracle" value={ORACLE_ACCOUNT} />
+          {/*
             <Field label="outcomeSlotCount" value={String(market.outcomes.length)} />
-            {/* responses think its 2024... FIX IT */}
-            <Field label="endTime" value={new Date(market.endTime * 1000).toLocaleDateString()} />
             <Field label="contract" value={LMSR_HOOK_ADDRESS} />
             <Field label="chain" value={`${chain.name} (${chain.id})`} mono={false} />
+           */}
           </div>
 
           {prepareTxHash && <TxField label="Tx" hash={prepareTxHash} chain={chain} />}
@@ -562,6 +772,8 @@ export function CreateMarketWizard() {
             Add initial collateral liquidity to the FPMM pool. The collateral is split proportionally across outcomes according to your chosen weights.
           </p>
 
+          {publishStatusBanner}
+
           <div className="cmw__info-grid">
             <Field label="osIndex" value={osIndex} />
             <Field label="collateral" value={COLLATERAL_TOKEN} />
@@ -614,6 +826,8 @@ export function CreateMarketWizard() {
               <span className="cmw__result-dot" />
               <span className="cmw__success-label">Market live</span>
             </div>
+
+            {publishStatusBanner}
 
             <div className="cmw__info-grid">
               <Field label="osIndex" value={osIndex} />
