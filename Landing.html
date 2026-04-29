@@ -1,0 +1,762 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>declareindependence.eth — predictions, conditional tokens, agents</title>
+<meta name="description" content="A wallet-native protocol for conditional prediction markets. Built on Uniswap v4 + Gnosis-style outcome tokens. For humans and agents."/>
+<link rel="icon" type="image/svg+xml" href="favicon.svg"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0A0A0A; --bg-1:#0F0F0F; --bg-2:#141414;
+    --line:#1F1F1F; --line-2:#2A2A2A;
+    --ink:#EFE8D8; --ink-dim:#9A958A; --ink-faint:#5C584F;
+    --amber:#F5A524; --amber-dim:#7A5212;
+    --green:#10B981; --cyan:#22D3EE; --rose:#F43F5E;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:'Space Grotesk',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  body{overflow-x:hidden}
+  ::selection{background:var(--amber);color:#000}
+  a{color:inherit;text-decoration:none}
+  .mono{font-family:'JetBrains Mono',monospace}
+  .serif-i{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400}
+
+  .grid-bg{position:fixed;inset:0;pointer-events:none;z-index:0;
+    background-image:linear-gradient(to right, rgba(239,232,216,.025) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(239,232,216,.025) 1px, transparent 1px);
+    background-size:48px 48px;
+    -webkit-mask-image:radial-gradient(ellipse at center, black 30%, transparent 75%);
+    mask-image:radial-gradient(ellipse at center, black 30%, transparent 75%);}
+  .scanline{position:fixed;inset:0;pointer-events:none;z-index:1;
+    background:repeating-linear-gradient(to bottom, transparent 0 3px, rgba(0,0,0,.18) 3px 4px);
+    mix-blend-mode:multiply;opacity:.45}
+  .vignette{position:fixed;inset:0;pointer-events:none;z-index:1;
+    background:radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,.5) 100%)}
+
+  .container-wide{max-width:1440px;margin:0 auto;padding:0 32px;position:relative;z-index:2}
+
+  /* nav */
+  nav.top{position:sticky;top:0;z-index:50;border-bottom:1px solid var(--line);
+    background:rgba(10,10,10,.78);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+  nav.top .row{display:flex;align-items:center;justify-content:space-between;
+    padding:14px 32px;max-width:1440px;margin:0 auto;gap:24px}
+  .brand{display:flex;align-items:center;gap:10px;font-family:'JetBrains Mono',monospace;font-weight:700;letter-spacing:.04em;font-size:13px}
+  .brand-mark{width:22px;height:22px;flex:0 0 22px}
+  .nav-links{display:flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.06em}
+  .nav-links a{padding:8px 12px;color:var(--ink-dim);border-radius:6px;transition:all .15s}
+  .nav-links a:hover{color:var(--ink);background:var(--bg-2)}
+  .nav-right{display:flex;gap:8px;align-items:center}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;
+    border:1px solid var(--line-2);border-radius:8px;
+    font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.08em;color:var(--ink);
+    background:var(--bg-1);cursor:pointer;transition:all .15s ease;text-transform:uppercase;text-decoration:none}
+  .btn:hover{border-color:var(--ink-dim);background:var(--bg-2)}
+  .btn-primary{background:var(--amber);color:#0A0A0A;border-color:var(--amber);font-weight:600}
+  .btn-primary:hover{background:#FFB73C;border-color:#FFB73C}
+  .btn-ghost{background:transparent}
+  .wallet-pill{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;
+    border:1px solid var(--amber-dim);border-radius:6px;background:rgba(245,165,36,.08);
+    font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--amber)}
+  .wallet-pill .marker{width:6px;height:6px;border-radius:50%;background:var(--amber)}
+
+  /* HERO */
+  section.hero{position:relative;padding:24px 0 0;overflow:hidden}
+  .hero-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:48px;align-items:stretch;
+    padding:48px 32px 64px;max-width:1440px;margin:0 auto}
+  .eyebrow{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.18em;
+    color:var(--amber);text-transform:uppercase;display:flex;align-items:center;gap:10px}
+  .eyebrow .tick{width:18px;height:1px;background:var(--amber)}
+  h1.display{font-family:'Space Grotesk',sans-serif;font-weight:600;
+    font-size:clamp(48px, 6.4vw, 92px);line-height:.96;letter-spacing:-.035em;
+    margin:18px 0 0;text-wrap:balance}
+  h1.display .amb{color:var(--amber)}
+  h1.display .ser{font-family:'Instrument Serif',serif;font-style:italic;font-weight:400;letter-spacing:-.02em}
+  .lede{font-size:18px;line-height:1.55;color:var(--ink-dim);margin:24px 0 32px;max-width:520px}
+  .lede strong{color:var(--ink);font-weight:500}
+  .hero-cta{display:flex;gap:10px;flex-wrap:wrap}
+  .hero-meta{margin-top:36px;display:grid;grid-template-columns:repeat(3,1fr);gap:1px;
+    background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .hero-meta>div{background:var(--bg-1);padding:14px 16px}
+  .hero-meta .k{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;
+    color:var(--ink-faint);text-transform:uppercase}
+  .hero-meta .v{font-family:'JetBrains Mono',monospace;font-size:18px;color:var(--ink);margin-top:4px}
+  .hero-meta .v.amb{color:var(--amber)}
+  .hero-meta .v.grn{color:var(--green)}
+
+  .signature{margin-top:36px;display:flex;align-items:center;gap:14px;
+    color:var(--ink-faint);font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.12em}
+  .signature .line{flex:1;height:1px;background:linear-gradient(to right, var(--line), transparent)}
+
+  /* tree card */
+  .tree-card{position:relative;border:1px solid var(--line);border-radius:14px;
+    background:linear-gradient(180deg,#0E0E0E 0%, #0A0A0A 100%);padding:18px;
+    overflow:hidden;min-height:520px;display:flex;flex-direction:column}
+  .tree-card::before{content:"";position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(ellipse 80% 40% at 30% 0%, rgba(245,165,36,.08), transparent 60%)}
+  .tree-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;position:relative}
+  .tree-head .label{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.12em;color:var(--ink-faint);text-transform:uppercase}
+  .tree-head .live{display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.1em;color:var(--green)}
+  .tree-head .live .dot{width:6px;height:6px;border-radius:50%;background:var(--green);
+    box-shadow:0 0 12px rgba(16,185,129,.6);animation:pulse 1.4s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+  .tree-svg{flex:1;width:100%;height:100%}
+  .tree-foot{display:flex;justify-content:space-between;align-items:center;margin-top:12px;
+    padding-top:12px;border-top:1px dashed var(--line-2);font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ink-faint)}
+
+  /* SECTION */
+  section.sec{padding:96px 0;border-top:1px solid var(--line);position:relative}
+  .sec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:32px;margin-bottom:48px;flex-wrap:wrap}
+  .sec-head h2{font-size:clamp(36px,4.4vw,64px);font-weight:600;letter-spacing:-.025em;
+    line-height:1;margin:14px 0 0;max-width:760px;text-wrap:balance}
+  .sec-head .right{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--ink-dim);max-width:340px;text-align:right;line-height:1.6}
+
+  /* dual track */
+  .dual{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .track{padding:32px;display:flex;flex-direction:column;gap:18px;position:relative;min-height:520px;background:var(--bg-1)}
+  .track + .track{border-left:1px solid var(--line)}
+  .track .head{display:flex;align-items:center;justify-content:space-between}
+  .track .who{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;color:var(--ink-faint);text-transform:uppercase}
+  .track h3{font-size:32px;font-weight:600;letter-spacing:-.02em;margin:6px 0 4px;line-height:1.05}
+  .track .sub{color:var(--ink-dim);font-size:15px;line-height:1.55;max-width:42ch;margin:0}
+  .track-tag{padding:4px 10px;border-radius:999px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em}
+  .tag-human{background:rgba(245,165,36,.1);color:var(--amber);border:1px solid var(--amber-dim)}
+  .tag-agent{background:rgba(34,211,238,.08);color:var(--cyan);border:1px solid #155e75}
+
+  .term{margin-top:auto;background:#070707;border:1px solid var(--line-2);border-radius:10px;
+    font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.65;overflow:hidden}
+  .term .bar{display:flex;align-items:center;gap:6px;padding:9px 12px;border-bottom:1px solid var(--line);background:#0C0C0C}
+  .term .bar .d{width:9px;height:9px;border-radius:50%;background:#2A2A2A}
+  .term .bar .name{margin-left:8px;color:var(--ink-faint);font-size:10.5px;letter-spacing:.1em}
+  .term .body{padding:14px 16px;min-height:200px;white-space:pre-wrap;word-break:break-word}
+  .term .ps{color:var(--amber)}
+  .term .cmt{color:var(--ink-faint)}
+  .term .str{color:var(--green)}
+  .term .num{color:var(--cyan)}
+  .term .key{color:var(--ink)}
+  .term .err{color:var(--rose)}
+  .term .cur{display:inline-block;width:8px;height:14px;background:var(--amber);
+    vertical-align:-2px;animation:blink 1s steps(2) infinite}
+  @keyframes blink{50%{opacity:0}}
+
+  .checklist{list-style:none;padding:0;margin:18px 0 0;display:flex;flex-direction:column;gap:10px;font-size:14.5px;color:var(--ink)}
+  .checklist li{display:flex;gap:10px;align-items:flex-start}
+  .checklist .b{font-family:'JetBrains Mono',monospace;color:var(--amber);font-size:13px;line-height:1.6;flex:0 0 auto}
+  .checklist.agent .b{color:var(--cyan)}
+
+  /* anatomy */
+  .anatomy{display:grid;grid-template-columns:1.1fr .9fr;gap:32px}
+  .anatomy-tree{border:1px solid var(--line);border-radius:12px;background:var(--bg-1);
+    padding:24px;min-height:520px;display:flex;flex-direction:column;overflow:hidden}
+  .anatomy-side{display:flex;flex-direction:column;gap:16px}
+  .anatomy-card{border:1px solid var(--line);border-radius:12px;padding:20px;background:var(--bg-1)}
+  .anatomy-card h4{margin:0;font-size:14px;font-family:'JetBrains Mono',monospace;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);font-weight:500}
+  .anatomy-card p{margin:8px 0 0;color:var(--ink);font-size:15px;line-height:1.55}
+  .anatomy-card .meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--amber);margin-top:8px}
+
+  /* tickers */
+  .ticker{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .mk{border:1px solid var(--line);border-radius:12px;background:var(--bg-1);padding:22px;
+    display:flex;flex-direction:column;gap:14px;position:relative;overflow:hidden;transition:border-color .15s}
+  .mk:hover{border-color:var(--line-2)}
+  .mk-head{display:flex;justify-content:space-between;align-items:center;
+    font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.1em;color:var(--ink-faint);text-transform:uppercase}
+  .mk-head .typ{padding:3px 8px;border-radius:999px;border:1px solid var(--line-2)}
+  .mk-head .typ.simple{color:var(--amber);border-color:var(--amber-dim);background:rgba(245,165,36,.05)}
+  .mk-head .typ.mixed{color:var(--cyan);border-color:#155e75;background:rgba(34,211,238,.05)}
+  .mk-q{font-size:18px;line-height:1.25;font-weight:600;letter-spacing:-.012em;color:var(--ink);text-wrap:balance}
+  .mk-bar{display:flex;height:8px;border-radius:99px;overflow:hidden;border:1px solid var(--line-2)}
+  .mk-bar .y{background:var(--green)}
+  .mk-bar .n{background:var(--rose)}
+  .mk-row{display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:12px}
+  .mk-row .yes{color:var(--green)} .mk-row .no{color:var(--rose)} .mk-row .mid{color:var(--ink-faint)}
+  .mk-foot{display:flex;justify-content:space-between;align-items:center;padding-top:12px;
+    border-top:1px dashed var(--line-2);font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--ink-faint)}
+  .mk-pos{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;font-family:'JetBrains Mono',monospace;font-size:11px}
+  .mk-pos .cell{padding:6px 8px;border:1px solid var(--line-2);border-radius:6px;display:flex;justify-content:space-between;color:var(--ink-dim)}
+  .mk-pos .cell .v{color:var(--amber)}
+
+  /* manifesto */
+  .manifesto{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .clause{padding:28px 24px;background:var(--bg-1);position:relative;min-height:220px;display:flex;flex-direction:column;gap:8px}
+  .clause + .clause{border-left:1px solid var(--line)}
+  .clause .num{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.14em;color:var(--ink-faint)}
+  .clause h4{margin:0;font-size:22px;font-weight:600;letter-spacing:-.012em;line-height:1.15}
+  .clause p{margin:auto 0 0;font-size:14px;line-height:1.55;color:var(--ink-dim)}
+  .clause .glyph{position:absolute;top:18px;right:20px;font-family:'Instrument Serif',serif;font-style:italic;font-size:36px;color:var(--amber);opacity:.65;line-height:1}
+
+  /* CTA */
+  .cta-strip{margin:0;padding:80px 32px;
+    background:radial-gradient(ellipse at 80% 50%, rgba(245,165,36,.16), transparent 60%),
+      radial-gradient(ellipse at 20% 50%, rgba(34,211,238,.08), transparent 60%), var(--bg);
+    border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+    text-align:center;position:relative;overflow:hidden}
+  .cta-strip h2{font-size:clamp(40px,6vw,80px);font-weight:600;letter-spacing:-.03em;line-height:1;margin:0;text-wrap:balance}
+  .cta-strip .sig{font-family:'Instrument Serif',serif;font-style:italic;font-size:22px;color:var(--amber);margin-top:16px;letter-spacing:.01em}
+  .cta-strip .ctas{display:flex;gap:10px;justify-content:center;margin-top:32px;flex-wrap:wrap}
+
+  /* footer */
+  footer{padding:48px 32px 64px;border-top:1px solid var(--line);font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--ink-faint)}
+  footer .row{max-width:1440px;margin:0 auto;display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;gap:32px}
+  footer h5{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-dim);margin:0 0 14px;font-weight:500}
+  footer ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
+  footer ul a{color:var(--ink);transition:color .15s} footer ul a:hover{color:var(--amber)}
+  footer .legal{max-width:1440px;margin:36px auto 0;display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;padding-top:24px;border-top:1px solid var(--line)}
+
+  /* marquee */
+  .marquee{border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+    overflow:hidden;background:var(--bg-1);font-family:'JetBrains Mono',monospace;
+    font-size:12px;letter-spacing:.08em;color:var(--ink-dim);padding:14px 0;white-space:nowrap}
+  .marquee-track{display:inline-flex;gap:48px;animation:scroll 60s linear infinite;padding-left:48px}
+  @keyframes scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+  .mq-item{display:inline-flex;align-items:center;gap:12px}
+  .mq-item .d{width:5px;height:5px;border-radius:50%;background:var(--amber-dim)}
+  .mq-item .v{color:var(--ink)}
+
+  @media(max-width:1024px){
+    .hero-grid{grid-template-columns:1fr;gap:24px;padding:32px 24px 48px}
+    .anatomy{grid-template-columns:1fr}
+    .dual{grid-template-columns:1fr}
+    .track + .track{border-left:none;border-top:1px solid var(--line)}
+    .ticker{grid-template-columns:1fr}
+    .manifesto{grid-template-columns:repeat(2,1fr)}
+    .clause + .clause{border-left:none}
+    .clause:nth-child(3),.clause:nth-child(4){border-top:1px solid var(--line)}
+    .clause:nth-child(2),.clause:nth-child(4){border-left:1px solid var(--line)}
+    footer .row{grid-template-columns:1fr 1fr}
+    .nav-links{display:none}
+  }
+</style>
+</head>
+<body>
+  <div class="grid-bg"></div>
+  <div class="scanline"></div>
+  <div class="vignette"></div>
+
+  <!-- =================== NAV =================== -->
+  <nav class="top">
+    <div class="row">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 64 64" width="22" height="22" aria-hidden="true">
+          <path d="M14 16 L10 16 L10 48 L14 48" fill="none" stroke="#EFE8D8" stroke-width="4" stroke-linecap="square"/>
+          <path d="M50 16 L54 16 L54 48 L50 48" fill="none" stroke="#EFE8D8" stroke-width="4" stroke-linecap="square"/>
+          <path d="M22 18 L22 46 L32 46 Q44 46 44 32 Q44 18 32 18 Z" fill="none" stroke="#F5A524" stroke-width="4" stroke-linejoin="round"/>
+          <circle cx="32" cy="32" r="3" fill="#F5A524"/>
+        </svg>
+        <span>DECLAREINDEPENDENCE<span style="color:var(--amber)">.ETH</span></span>
+      </div>
+      <!-- 
+      <div class="nav-links">
+        <a href="#markets">MARKETS</a>
+        <a href="#create">CREATE</a>
+        <a href="#agents">FOR AGENTS</a>
+        <a href="#docs">DOCS</a>
+      </div>
+       -->
+      <div class="nav-right">
+        <a class="btn" href="https://opinologos-v2.vercel.app">Go to app</a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- =================== HERO =================== -->
+  <section class="hero">
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow"><span class="tick"></span>declareindependence.eth · v1</div>
+        <h1 class="display">Predict, <span class="ser">split</span>,<br/>and <span class="amb">trade</span> the future.</h1>
+        <p class="lede">A wallet-native venue for <strong>conditional</strong> prediction markets on Gnosis-style outcome tokens. Compose <strong>arbitrary positions</strong> across stacked questions. Built for humans <em>and</em> autonomous agents.</p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="https://opinologos-v2.vercel.app/markets">Browse markets →</a>
+          <a class="btn" href="https://opinologos-v2.vercel.app/create-market">Create a market</a>
+          <!-- <a class="btn btn-ghost" href="#agents">For agents ↗</a> -->
+        </div>
+
+        <div class="hero-meta">
+          <!-- 
+ -->
+          <div>
+            <a href="https://sepolia.uniscan.xyz/address/0x71Fa81ecdff4e049A91f1FA6ABd8B75C77624acc"><div class="k">Hook</div><div class="v grn">FPMM · live</div></a>
+          </div>
+          <div><div class="k">Chain</div><div class="v">Uniswap-sepolia</div></div>
+          <div><div class="k">Collateral</div><div class="v amb">OPIN</div></div>
+        </div>
+<!-- 
+        <div class="signature">
+          <span>signed at block</span>
+          <span style="color:var(--amber)">#21,448,902</span>
+          <span class="line"></span>
+          <span>1776 / on-chain</span>
+        </div>
+         -->
+      </div>
+
+      <div class="tree-card">
+        <div class="tree-head">
+          <div class="label">SIMPLE MARKET · 2 OUTCOMES</div>
+          <div class="live"><span class="dot"></span>LIVE · TRADING OPEN</div>
+        </div>
+
+        <svg class="tree-svg" viewBox="0 0 560 480" preserveAspectRatio="xMidYMid meet">
+          <g opacity=".25">
+            <line x1="0"   y1="0" x2="0"   y2="480" stroke="#1F1F1F"/>
+            <line x1="120" y1="0" x2="120" y2="480" stroke="#1F1F1F"/>
+            <line x1="240" y1="0" x2="240" y2="480" stroke="#1F1F1F"/>
+            <line x1="360" y1="0" x2="360" y2="480" stroke="#1F1F1F"/>
+            <line x1="480" y1="0" x2="480" y2="480" stroke="#1F1F1F"/>
+          </g>
+
+          <!-- edges -->
+          <path d="M194 260 C 214 260, 214 260, 234 260" fill="none" stroke="#3A3A3A" stroke-width="1.2"/>
+          <path d="M384 260 C 403 260, 403 176, 422 176" fill="none" stroke="#3A3A3A" stroke-width="1.2"/>
+          <path d="M384 260 C 403 260, 403 314, 422 314" fill="none" stroke="#3A3A3A" stroke-width="1.2"/>
+
+          <!-- particles -->
+          <circle r="2.5" fill="#F5A524">
+            <animateMotion dur="3.5s" repeatCount="indefinite"
+              path="M194 260 C 214 260, 214 260, 234 260"/>
+          </circle>
+          <circle r="2.5" fill="#10B981">
+            <animateMotion dur="3.2s" repeatCount="indefinite" begin="-1.2s"
+              path="M384 260 C 403 260, 403 176, 422 176"/>
+          </circle>
+          <circle r="2.5" fill="#F43F5E">
+            <animateMotion dur="3.8s" repeatCount="indefinite" begin="-.6s"
+              path="M384 260 C 403 260, 403 314, 422 314"/>
+          </circle>
+
+          <!-- MARKET node -->
+          <g transform="translate(24 200)">
+            <rect width="170" height="120" rx="8" fill="#0F0F0F" stroke="#2A2A2A"/>
+            <rect width="3" height="120" fill="#F5A524" rx="1"/>
+            <text x="14" y="20" fill="#5C584F" font-family="JetBrains Mono" font-size="9" letter-spacing="1.5">MARKET</text>
+            <text x="14" y="42" fill="#EFE8D8" font-family="Space Grotesk" font-size="11" font-weight="600">
+              <tspan x="14" dy="0">Will ETH surpass</tspan>
+              <tspan x="14" dy="14">$4,000 by 12/31/26?</tspan>
+            </text>
+            <text x="14" y="92"  fill="#5C584F" font-family="JetBrains Mono" font-size="8.5">collateral · USDC</text>
+            <text x="14" y="105" fill="#7A5212" font-family="JetBrains Mono" font-size="8.5">Click to fund pool</text>
+          </g>
+
+          <!-- CONDITION node -->
+          <g transform="translate(234 200)">
+            <rect width="150" height="120" rx="8" fill="#0F0F0F" stroke="#2A2A2A"/>
+            <rect width="3" height="120" fill="#F5A524" rx="1"/>
+            <text x="14" y="20" fill="#5C584F" font-family="JetBrains Mono" font-size="9" letter-spacing="1.5">CONDITION 1</text>
+            <text x="14" y="40" fill="#F5A524" font-family="JetBrains Mono" font-size="10" font-weight="600">0xe207c22d…</text>
+            <text x="14" y="64" fill="#9A958A" font-family="JetBrains Mono" font-size="9">2 slots</text>
+            <line x1="14" y1="76" x2="136" y2="76" stroke="#1F1F1F"/>
+            <text x="14" y="92"  fill="#5C584F" font-family="JetBrains Mono" font-size="8.5">oracle · CoinGecko</text>
+            <text x="14" y="105" fill="#7A5212" font-family="JetBrains Mono" font-size="8.5">Click to manage</text>
+          </g>
+
+          <!-- POSITION YES -->
+          <g transform="translate(422 130)">
+            <rect width="130" height="92" rx="8" fill="#0F0F0F" stroke="#2A2A2A"/>
+            <text x="12" y="18" fill="#5C584F" font-family="JetBrains Mono" font-size="9" letter-spacing="1.5">POSITION 0</text>
+            <text x="12" y="38" fill="#10B981" font-family="Space Grotesk" font-size="14" font-weight="700">Yes</text>
+            <text x="12" y="62" fill="#F5A524" font-family="JetBrains Mono" font-size="14" font-weight="600">0.5822 <tspan fill="#7A5212" font-size="10">col</tspan></text>
+            <text x="12" y="80" fill="#5C584F" font-family="JetBrains Mono" font-size="8.5">Click to trade</text>
+          </g>
+
+          <!-- POSITION NO -->
+          <g transform="translate(422 268)">
+            <rect width="130" height="92" rx="8" fill="#0F0F0F" stroke="#2A2A2A"/>
+            <text x="12" y="18" fill="#5C584F" font-family="JetBrains Mono" font-size="9" letter-spacing="1.5">POSITION 1</text>
+            <text x="12" y="38" fill="#F43F5E" font-family="Space Grotesk" font-size="14" font-weight="700">No</text>
+            <text x="12" y="62" fill="#F5A524" font-family="JetBrains Mono" font-size="14" font-weight="600">0.4178 <tspan fill="#7A5212" font-size="10">col</tspan></text>
+            <text x="12" y="80" fill="#5C584F" font-family="JetBrains Mono" font-size="8.5">Click to trade</text>
+          </g>
+        </svg>
+<!-- 
+        <div class="tree-foot">
+          <span>0x42f924d5…b801</span>
+          <span style="color:var(--amber)">fee 0.30% · α 0.5 · β 0.2</span>
+        </div> 
+        -->
+      </div>
+    </div>
+  </section>
+
+  <!-- =================== MARQUEE =================== -->
+  <div class="marquee" aria-hidden="true">
+    <div class="marquee-track">
+      <span class="mq-item"><span class="d"></span><span>BTC ≥ $150k by EOY</span><span class="v">0.412</span></span>
+      <span class="mq-item"><span class="d"></span><span>Fed cuts ≥ 50bps in Q3</span><span class="v">0.221</span></span>
+      <span class="mq-item"><span class="d"></span><span>GPT-5 ships before Jul-26</span><span class="v">0.687</span></span>
+      <span class="mq-item"><span class="d"></span><span>EU AI Act art. 6 enforced</span><span class="v">0.339</span></span>
+      <span class="mq-item"><span class="d"></span><span>L2 sequencer downtime &gt; 1h</span><span class="v">0.094</span></span>
+      <span class="mq-item"><span class="d"></span><span>SpaceX IPO filed in 2026</span><span class="v">0.118</span></span>
+      <span class="mq-item"><span class="d"></span><span>Aave unfreezes WETH on mainnet</span><span class="v">0.561</span></span>
+      <span class="mq-item"><span class="d"></span><span>Worldcoin user count &gt; 50M</span><span class="v">0.205</span></span>
+      <span class="mq-item"><span class="d"></span><span>TSLA delivers &gt; 2.1M cars</span><span class="v">0.488</span></span>
+      <!-- duplicate for seamless scroll -->
+      <span class="mq-item"><span class="d"></span><span>BTC ≥ $150k by EOY</span><span class="v">0.412</span></span>
+      <span class="mq-item"><span class="d"></span><span>Fed cuts ≥ 50bps in Q3</span><span class="v">0.221</span></span>
+      <span class="mq-item"><span class="d"></span><span>GPT-5 ships before Jul-26</span><span class="v">0.687</span></span>
+      <span class="mq-item"><span class="d"></span><span>EU AI Act art. 6 enforced</span><span class="v">0.339</span></span>
+      <span class="mq-item"><span class="d"></span><span>L2 sequencer downtime &gt; 1h</span><span class="v">0.094</span></span>
+      <span class="mq-item"><span class="d"></span><span>SpaceX IPO filed in 2026</span><span class="v">0.118</span></span>
+      <span class="mq-item"><span class="d"></span><span>Aave unfreezes WETH on mainnet</span><span class="v">0.561</span></span>
+      <span class="mq-item"><span class="d"></span><span>Worldcoin user count &gt; 50M</span><span class="v">0.205</span></span>
+      <span class="mq-item"><span class="d"></span><span>TSLA delivers &gt; 2.1M cars</span><span class="v">0.488</span></span>
+    </div>
+  </div>
+
+  <!-- =================== HUMANS / AGENTS =================== -->
+  <section class="sec" id="agents">
+    <div class="container-wide">
+      <div class="sec-head">
+        <div>
+          <div class="eyebrow"><span class="tick"></span>two front doors</div>
+          <h2>Built for the curious<br/>and the <span style="color:var(--amber);font-style:italic;font-family:'Instrument Serif',serif;font-weight:400">autonomous</span>.</h2>
+        </div>
+        <div class="right">One protocol, two surfaces. The same conditional tokens, the same FPMM hook, the same liquidity — accessed through whichever interface fits the trader.</div>
+      </div>
+
+      <div class="dual">
+        <div class="track">
+          <div class="head">
+            <div class="who">01 / for humans</div>
+            <span class="track-tag tag-human">wallet first</span>
+          </div>
+          <h3>A market for every opinion you can phrase.</h3>
+          <p class="sub">Connect a wallet, scroll on-chain signals, and stake on the outcomes you believe in. Compose mixed markets to express conditional theses across two or more questions.</p>
+          <ul class="checklist">
+            <li><span class="b">→</span><span>Multi outcome simple markets, multi-outcome mixed markets.</span></li>
+            <li><span class="b">→</span><span>Split &amp; merge positions to extract intermediate views.</span></li>
+            <li><span class="b">→</span><span>Provide liquidity, earn dynamic fees scaled by volatility.</span></li>
+            <li><span class="b">→</span><span>Resolve via published oracles — Chainlink, Reality.eth, or signed.</span></li>
+          </ul>
+          <!-- put an image of the swapper -->
+          <div class="term">
+
+            <div class="bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="name">trader@declare ~ ui</span></div>
+          <img src="../media/images/swap-panel.png" alt="swap-panel" width="auto">
+          </div>
+        </div>
+
+        <div class="track">
+          <div class="head">
+            <div class="who">02 / for agents</div>
+            <span class="track-tag tag-agent">MCP</span>
+          </div>
+          <h3>A protocol surface autonomous traders can actually read.</h3>
+          <p class="sub">Every market exposes machine-readable conditions, deterministic position IDs, and a single-call quote endpoint. Drop in a key, drop in a strategy.</p>
+         
+          <ul class="checklist agent">
+            <li><span class="b">▸</span><span>Typed market schema with stable position IDs.</span></li>
+            <li><span class="b">▸</span><span><span class="mono">calcBuyAmount() and calcSellAmount()</span> returns expected fill.</span></li>
+            <li><span class="b">▸</span><span>Server-side <span class="mono">setOperator</span> flow — no human-in-the-loop required.</span></li>
+          </ul> 
+         
+          <div class="term">
+            <div class="bar"><span class="d"></span><span class="d"></span><span class="d"></span><span class="name">agent@declare ~ sdk</span></div>
+            <div class="body"><span class="ps">$ </span><span class="key">Enter market 0xe207… on position YES with  amount 50</span>
+<span class="cmt"># fpmm hook quote</span>
+<span class="key">  outcomeAmt  </span><span class="num">428.91 </span><span class="cmt"># expected fill</span>
+<span class="key">  effPrice    </span><span class="num">0.5828 col</span>
+
+<span class="ps">signing… </span><span class="str">ok ✓</span>
+<span class="key">tx 0x9c4d…aa2f mined in block </span><span class="num">21448902</span>
+
+<span class="ps">$ </span><span class="key">di portfolio --addr 0xagent.eth</span>
+<span class="key">  open positions    </span><span class="num">14</span>
+<span class="key">  notional          </span><span class="num">$ 18,402.10</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =================== ANATOMY (mixed market) =================== -->
+  <section class="sec">
+    <div class="container-wide">
+      <div class="sec-head">
+        <div>
+          <div class="eyebrow"><span class="tick"></span>arbitrary positions</div>
+          <h2>Stack questions.<br/>Trade the <span style="color:var(--amber)">Cartesian product</span>.</h2>
+        </div>
+        <div class="right">A mixed market combines two or more conditions into outcome positions for every joint scenario. Express precise theses — "Yes × No" or "No × Yes" — that no single market can.</div>
+      </div>
+
+      <div class="anatomy">
+        <div class="anatomy-tree">
+          <div class="tree-head">
+            <div class="label">MIXED · 2 CONDITIONS · 4 POSITIONS</div>
+            <div class="live"><span class="dot"></span>LIVE · TRADING OPEN</div>
+          </div>
+
+          <svg class="tree-svg" viewBox="0 0 600 480" preserveAspectRatio="xMidYMid meet" style="margin-top:10px">
+            <!-- edges market -> sources -->
+            <path d="M164 240 C 180 240, 180 138, 196 138" fill="none" stroke="#3A3A3A" stroke-width="1.2"/>
+            <path d="M164 240 C 180 240, 180 342, 196 342" fill="none" stroke="#3A3A3A" stroke-width="1.2"/>
+            <!-- sources -> slots -->
+            <path d="M346 138 C 363 138, 363 56,  380 56"  fill="none" stroke="#3A3A3A" stroke-width="1.2"/>
+            <path d="M346 138 C 363 138, 363 142, 380 142" fill="none" stroke="#3A3A3A" stroke-width="1.2"/>
+            <path d="M346 342 C 363 342, 363 268, 380 268" fill="none" stroke="#3A3A3A" stroke-width="1.2"/>
+            <path d="M346 342 C 363 342, 363 354, 380 354" fill="none" stroke="#3A3A3A" stroke-width="1.2"/>
+            <!-- slots -> positions (cartesian) -->
+            <path d="M460 56  C 474 56,  474 40,  488 40"  fill="none" stroke="#2A2A2A" stroke-width="1"/>
+            <path d="M460 56  C 474 56,  474 114, 488 114" fill="none" stroke="#2A2A2A" stroke-width="1"/>
+            <path d="M460 142 C 474 142, 474 254, 488 254" fill="none" stroke="#2A2A2A" stroke-width="1"/>
+            <path d="M460 142 C 474 142, 474 346, 488 346" fill="none" stroke="#2A2A2A" stroke-width="1"/>
+            <path d="M460 268 C 474 268, 474 114, 488 114" fill="none" stroke="#2A2A2A" stroke-width="1"/>
+            <path d="M460 268 C 474 268, 474 346, 488 346" fill="none" stroke="#2A2A2A" stroke-width="1"/>
+            <path d="M460 354 C 474 354, 474 40,  488 40"  fill="none" stroke="#2A2A2A" stroke-width="1"/>
+            <path d="M460 354 C 474 354, 474 254, 488 254" fill="none" stroke="#2A2A2A" stroke-width="1"/>
+
+            <!-- particles -->
+            <circle r="2" fill="#22D3EE">
+              <animateMotion dur="3.6s" repeatCount="indefinite"
+                path="M346 138 C 363 138, 363 56, 380 56"/>
+            </circle>
+            <circle r="2" fill="#F5A524">
+              <animateMotion dur="4s" repeatCount="indefinite" begin="-1s"
+                path="M460 268 C 474 268, 474 114, 488 114"/>
+            </circle>
+
+            <!-- MARKET -->
+            <g transform="translate(14 184)">
+              <rect width="150" height="112" rx="8" fill="#0F0F0F" stroke="#2A2A2A"/>
+              <rect width="3" height="112" fill="#F5A524" rx="1"/>
+              <text x="12" y="18" fill="#5C584F" font-family="JetBrains Mono" font-size="8.5" letter-spacing="1.5">MARKET</text>
+              <text x="12" y="38" fill="#EFE8D8" font-family="Space Grotesk" font-size="10" font-weight="600">
+                <tspan x="12" dy="0">ETH ≥ $3k</tspan>
+                <tspan x="12" dy="13">× Aave WETH</tspan>
+                <tspan x="12" dy="13">unfreeze</tspan>
+              </text>
+              <text x="12" y="98" fill="#7A5212" font-family="JetBrains Mono" font-size="8">Click to fund pool</text>
+            </g>
+
+            <!-- SOURCE 1 -->
+            <g transform="translate(196 88)">
+              <rect width="150" height="100" rx="8" fill="#0F0F0F" stroke="#155e75"/>
+              <rect width="3" height="100" fill="#22D3EE" rx="1"/>
+              <text x="12" y="18" fill="#5C584F" font-family="JetBrains Mono" font-size="8.5" letter-spacing="1.5">SOURCE 1</text>
+              <text x="12" y="36" fill="#EFE8D8" font-family="Space Grotesk" font-size="9.5" font-weight="600">
+                <tspan x="12" dy="0">Will ETH touch $3,000</tspan>
+                <tspan x="12" dy="12">by Sep-26?</tspan>
+              </text>
+              <text x="12" y="74" fill="#22D3EE" font-family="JetBrains Mono" font-size="9" font-weight="600">0x42f924…</text>
+              <text x="12" y="88" fill="#5C584F" font-family="JetBrains Mono" font-size="8">2 slots</text>
+            </g>
+
+            <!-- SOURCE 2 -->
+            <g transform="translate(196 292)">
+              <rect width="150" height="100" rx="8" fill="#0F0F0F" stroke="#155e75"/>
+              <rect width="3" height="100" fill="#22D3EE" rx="1"/>
+              <text x="12" y="18" fill="#5C584F" font-family="JetBrains Mono" font-size="8.5" letter-spacing="1.5">SOURCE 2</text>
+              <text x="12" y="36" fill="#EFE8D8" font-family="Space Grotesk" font-size="9.5" font-weight="600">
+                <tspan x="12" dy="0">Will Aave unfreeze</tspan>
+                <tspan x="12" dy="12">WETH by Apr?</tspan>
+              </text>
+              <text x="12" y="74" fill="#22D3EE" font-family="JetBrains Mono" font-size="9" font-weight="600">0xb2729c…</text>
+              <text x="12" y="88" fill="#5C584F" font-family="JetBrains Mono" font-size="8">2 slots</text>
+            </g>
+
+            <!-- SLOTS -->
+            <g transform="translate(380 24)">
+              <rect width="80" height="64" rx="6" fill="#0F0F0F" stroke="#2A2A2A"/>
+              <text x="10" y="14" fill="#5C584F" font-family="JetBrains Mono" font-size="7.5" letter-spacing="1.2">SLOT 0</text>
+              <text x="10" y="30" fill="#10B981" font-family="Space Grotesk" font-size="11" font-weight="700">Yes</text>
+              <text x="10" y="48" fill="#F5A524" font-family="JetBrains Mono" font-size="10" font-weight="600">0.146</text>
+            </g>
+            <g transform="translate(380 110)">
+              <rect width="80" height="64" rx="6" fill="#0F0F0F" stroke="#2A2A2A"/>
+              <text x="10" y="14" fill="#5C584F" font-family="JetBrains Mono" font-size="7.5" letter-spacing="1.2">SLOT 1</text>
+              <text x="10" y="30" fill="#F43F5E" font-family="Space Grotesk" font-size="11" font-weight="700">No</text>
+              <text x="10" y="48" fill="#F5A524" font-family="JetBrains Mono" font-size="10" font-weight="600">0.250</text>
+            </g>
+            <g transform="translate(380 236)">
+              <rect width="80" height="64" rx="6" fill="#0F0F0F" stroke="#2A2A2A"/>
+              <text x="10" y="14" fill="#5C584F" font-family="JetBrains Mono" font-size="7.5" letter-spacing="1.2">SLOT 0</text>
+              <text x="10" y="30" fill="#10B981" font-family="Space Grotesk" font-size="11" font-weight="700">Yes</text>
+              <text x="10" y="48" fill="#F5A524" font-family="JetBrains Mono" font-size="10" font-weight="600">0.250</text>
+            </g>
+            <g transform="translate(380 322)">
+              <rect width="80" height="64" rx="6" fill="#0F0F0F" stroke="#2A2A2A"/>
+              <text x="10" y="14" fill="#5C584F" font-family="JetBrains Mono" font-size="7.5" letter-spacing="1.2">SLOT 1</text>
+              <text x="10" y="30" fill="#F43F5E" font-family="Space Grotesk" font-size="11" font-weight="700">No</text>
+              <text x="10" y="48" fill="#F5A524" font-family="JetBrains Mono" font-size="10" font-weight="600">0.561</text>
+            </g>
+
+            <!-- POSITIONS -->
+            <g transform="translate(488 12)">
+              <rect width="100" height="56" rx="6" fill="#0F0F0F" stroke="#3A2A0F"/>
+              <text x="10" y="14" fill="#5C584F" font-family="JetBrains Mono" font-size="7.5" letter-spacing="1.2">POS 0</text>
+              <text x="10" y="30" fill="#EFE8D8" font-family="Space Grotesk" font-size="11" font-weight="700">Yes × No</text>
+              <text x="10" y="46" fill="#F5A524" font-family="JetBrains Mono" font-size="10" font-weight="600">0.1464 <tspan fill="#7A5212" font-size="8">col</tspan></text>
+            </g>
+            <g transform="translate(488 86)">
+              <rect width="100" height="56" rx="6" fill="#0F0F0F" stroke="#3A2A0F"/>
+              <text x="10" y="14" fill="#5C584F" font-family="JetBrains Mono" font-size="7.5" letter-spacing="1.2">POS 1</text>
+              <text x="10" y="30" fill="#EFE8D8" font-family="Space Grotesk" font-size="11" font-weight="700">Yes × Yes</text>
+              <text x="10" y="46" fill="#F5A524" font-family="JetBrains Mono" font-size="10" font-weight="600">0.5607 <tspan fill="#7A5212" font-size="8">col</tspan></text>
+            </g>
+            <g transform="translate(488 226)">
+              <rect width="100" height="56" rx="6" fill="#0F0F0F" stroke="#3A2A0F"/>
+              <text x="10" y="14" fill="#5C584F" font-family="JetBrains Mono" font-size="7.5" letter-spacing="1.2">POS 2</text>
+              <text x="10" y="30" fill="#EFE8D8" font-family="Space Grotesk" font-size="11" font-weight="700">No × No</text>
+              <text x="10" y="46" fill="#F5A524" font-family="JetBrains Mono" font-size="10" font-weight="600">0.1464 <tspan fill="#7A5212" font-size="8">col</tspan></text>
+            </g>
+            <g transform="translate(488 318)">
+              <rect width="100" height="56" rx="6" fill="#0F0F0F" stroke="#3A2A0F"/>
+              <text x="10" y="14" fill="#5C584F" font-family="JetBrains Mono" font-size="7.5" letter-spacing="1.2">POS 3</text>
+              <text x="10" y="30" fill="#EFE8D8" font-family="Space Grotesk" font-size="11" font-weight="700">No × Yes</text>
+              <text x="10" y="46" fill="#F5A524" font-family="JetBrains Mono" font-size="10" font-weight="600">0.1464 <tspan fill="#7A5212" font-size="8">col</tspan></text>
+            </g>
+          </svg>
+        </div>
+
+        <div class="anatomy-side">
+          <div class="anatomy-card">
+            <h4>Condition</h4>
+            <p>A keccak-derived ID over the question, oracle, and outcome slot count. Same inputs, same ID — anywhere.</p>
+            <div class="meta mono">id = keccak(question, oracle, slotCount)</div>
+          </div>
+          <div class="anatomy-card">
+            <h4>Outcome space</h4>
+            <p>An ordered set of conditions plus a collateral token. Every joint outcome gets a deterministic ERC-6909 token ID.</p>
+            <div class="meta mono">osIndex = keccak(collateral, sortedConds)</div>
+          </div>
+          <div class="anatomy-card">
+            <h4>Position</h4>
+            <p>One leaf in the product. Trade it directly, split it from a parent, or merge children back into collateral.</p>
+            <div class="meta mono">positionId(osIndex, linearIdx)</div>
+          </div>
+          <div class="anatomy-card" style="border-color:var(--amber-dim);background:linear-gradient(180deg, rgba(245,165,36,.06), transparent)">
+            <h4 style="color:var(--amber)">Resolve &amp; redeem</h4>
+            <p>When the oracle reports payouts, every winning position becomes redeemable for collateral — proportional, automatic, on-chain.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =================== MARKETS TICKER =================== -->
+  <section class="sec" id="markets">
+    <div class="container-wide">
+      <div class="sec-head">
+        <div>
+          <div class="eyebrow"><span class="tick"></span>active signals</div>
+          <h2>What the chain is <span style="color:var(--amber)">betting</span>.</h2>
+        </div>
+        <div class="right">Example snapshot of three open markets. Every quote is a FPMM fill — re-priced on every block.</div>
+      </div>
+
+      <div class="ticker">
+        <div class="mk">
+          <div class="mk-head">
+            <span class="typ simple">SIMPLE · 2 OUTCOMES</span>
+            <span>8mo</span>
+          </div>
+          <div class="mk-q">Will ETH price surpass 4000 USD before 31 Dec 2026?</div>
+          <div class="mk-bar"><div class="y" style="width:58.2%"></div><div class="n" style="width:41.8%"></div></div>
+          <div class="mk-row"><span class="yes">YES · 58.2%</span><span class="mid">vol $ 142.4k</span><span class="no">NO · 41.8%</span></div>
+          <div class="mk-foot"><span>oracle · CoinGecko · Chainlink</span><span style="color:var(--amber)">will-eth-…4000.eth ↗</span></div>
+        </div>
+
+        <div class="mk">
+          <div class="mk-head">
+            <span class="typ mixed">MIXED · 2 CONDITIONS</span>
+            <span>3mo</span>
+          </div>
+          <div class="mk-q">ETH touches $3k by Sep-26 × Aave unfreezes WETH by April</div>
+          <div class="mk-bar"><div class="y" style="width:56.1%"></div><div class="n" style="width:43.9%"></div></div>
+          <div class="mk-row"><span class="yes">YES · 56.1%</span><span class="mid">vol $ 51.0k</span><span class="no">NO · 43.9%</span></div>
+          <div class="mk-pos">
+            <div class="cell"><span>Yes×No</span><span class="v">0.146</span></div>
+            <div class="cell"><span>Yes×Yes</span><span class="v">0.561</span></div>
+            <div class="cell"><span>No×No</span><span class="v">0.146</span></div>
+            <div class="cell"><span>No×Yes</span><span class="v">0.146</span></div>
+          </div>
+          <div class="mk-foot"><span>oracle · Reality.eth</span><span style="color:var(--amber)">eth-3k-x-aave-…eth ↗</span></div>
+        </div>
+
+        <div class="mk">
+          <div class="mk-head">
+            <span class="typ simple">SIMPLE · 2 OUTCOMES</span>
+            <span>21d</span>
+          </div>
+          <div class="mk-q">Fed funds rate cut by ≥ 50bps before September 2026?</div>
+          <div class="mk-bar"><div class="y" style="width:22.1%"></div><div class="n" style="width:77.9%"></div></div>
+          <div class="mk-row"><span class="yes">YES · 22.1%</span><span class="mid">vol $ 88.6k</span><span class="no">NO · 77.9%</span></div>
+          <div class="mk-foot"><span>oracle · FRED · signed</span><span style="color:var(--amber)">fed-cuts-50bps-…eth ↗</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =================== MANIFESTO =================== -->
+  <section class="sec">
+    <div class="container-wide">
+      <div class="sec-head">
+        <div>
+          <div class="eyebrow"><span class="tick"></span>the unanimous declaration</div>
+          <h2>Four clauses we won't <span style="color:var(--amber);font-family:'Instrument Serif',serif;font-style:italic;font-weight:400">amend</span>.</h2>
+        </div>
+      </div>
+      <div class="manifesto">
+        <div class="clause">
+          <div class="num">ARTICLE I</div>
+          <h4>All markets are public.</h4>
+          <p>Every condition, every position, every fill — visible, indexed, replayable. No private books.</p>
+          <div class="glyph">§</div>
+        </div>
+        <div class="clause">
+          <div class="num">ARTICLE II</div>
+          <h4>Composition is a right.</h4>
+          <p>If a question can be phrased, it can be a market. If two markets exist, you can trade their joint outcome.</p>
+          <div class="glyph">∩</div>
+        </div>
+        <div class="clause">
+          <div class="num">ARTICLE III</div>
+          <h4>Liquidity earns honestly.</h4>
+          <p>The hook collects a dynamic fee scaled by imbalance and volatility. LPs are paid in collateral, proportional to share.</p>
+          <div class="glyph">ƒ</div>
+        </div>
+        <div class="clause">
+          <div class="num">ARTICLE IV</div>
+          <h4>Agents are first-class.</h4>
+          <p>A typed MCP, deterministic IDs, single-call quotes. The protocol does not care which keys signed the tx.</p>
+          <div class="glyph">⌐</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =================== CTA =================== -->
+  <div class="cta-strip">
+    <h2>Hold these <span class="serif-i" style="color:var(--amber)">truths</span><br/>to be self-priced.</h2>
+    <div class="sig">— signed, the network</div>
+  </div>
+
+  <!-- =================== FOOTER =================== -->
+  <footer id="docs">
+    <div class="row">
+      <div>
+        <div class="brand" style="margin-bottom:14px">
+          <svg class="brand-mark" viewBox="0 0 64 64" width="22" height="22" aria-hidden="true">
+            <path d="M14 16 L10 16 L10 48 L14 48" fill="none" stroke="#EFE8D8" stroke-width="4" stroke-linecap="square"/>
+            <path d="M50 16 L54 16 L54 48 L50 48" fill="none" stroke="#EFE8D8" stroke-width="4" stroke-linecap="square"/>
+            <path d="M22 18 L22 46 L32 46 Q44 46 44 32 Q44 18 32 18 Z" fill="none" stroke="#F5A524" stroke-width="4" stroke-linejoin="round"/>
+            <circle cx="32" cy="32" r="3" fill="#F5A524"/>
+          </svg>
+          <span>DECLAREINDEPENDENCE<span style="color:var(--amber)">.ETH</span></span>
+        </div>
+        <div style="max-width:320px;line-height:1.6;color:var(--ink-dim)">A wallet-native protocol for conditional prediction markets. Built on Uniswap v4 + Gnosis-style outcome tokens.</div>
+        <div style="margin-top:18px" class="serif-i">
+          <em style="color:var(--amber);font-size:14px">— in pursuit of better priors</em>
+        </div>
+      </div>
+    </div>
+    <div class="legal">
+      <span>Not financial advice. Do not trade what you cannot resolve.</span>
+    </div>
+  </footer>
+</body>
+</html>
