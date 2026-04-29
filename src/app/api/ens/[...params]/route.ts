@@ -5,7 +5,7 @@
 // On-chain resolver must point to: https://{host}/api/ens/{sender}/{data}.json
 // with wildcard support for *.declareindependence.eth (ENSIP-10).
 import { NextRequest, NextResponse } from 'next/server';
-import { decodeAbiParameters, encodeAbiParameters, encodePacked, keccak256 } from 'viem';
+import { decodeFunctionData, decodeAbiParameters, encodeAbiParameters, encodePacked, keccak256 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { sql } from '@/lib/db';
 import { LMSR_HOOK_ADDRESS } from '@/lib/contracts';
@@ -114,16 +114,32 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ par
     const sender = segments[0] as `0x${string}`;
     const rawCalldata = segments[1].replace(/\.json$/, '');
     const calldataHex = (rawCalldata.startsWith('0x') ? rawCalldata : `0x${rawCalldata}`) as `0x${string}`;
-    const hex = rawCalldata.replace(/^0x/, '');
 
+    // this failed
+    /* 
+    const hex = rawCalldata.replace(/^0x/, '');
     // Skip 4-byte function selector (resolve(bytes,bytes) = 0x9061b923)
     const argsHex = `0x${hex.slice(8)}` as `0x${string}`;
-
     const [nameBytes, innerData] = decodeAbiParameters(
       [{ type: 'bytes' }, { type: 'bytes' }],
       argsHex,
     );
+ */
+    const { args } = decodeFunctionData({
+      abi: [{
+        name: 'resolve',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [
+          { name: 'name', type: 'bytes' },
+          { name: 'data', type: 'bytes' },
+        ],
+        outputs: [{ type: 'bytes' }],
+      }],
+      data: calldataHex,
+    });
 
+    const [nameBytes, innerData] = args;
     const name = dnsWireDecode(nameBytes as string);
     console.log(`Resolving: ${name}`);
 
