@@ -128,7 +128,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ par
       argsHex,
     );
  */
-    const { args } = decodeFunctionData({
+/*     const { args } = decodeFunctionData({
       abi: [{
         name: 'resolve',
         type: 'function',
@@ -137,12 +137,29 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ par
           { name: 'name', type: 'bytes' },
           { name: 'data', type: 'bytes' },
         ],
-        outputs: [{ type: 'bytes' }],
+        //outputs: [{ type: 'bytes' }],
+      }],
+      data: calldataHex,
+    });
+ */
+    const decoded = decodeFunctionData({
+      abi: [{
+        name: 'resolve',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [
+          { name: 'name', type: 'bytes' },
+          { name: 'data', type: 'bytes' },
+        ],
       }],
       data: calldataHex,
     });
 
-    const [nameBytes, innerData] = args;
+    if (!decoded.args) {
+      throw new Error(`Failed to decode function data: ${calldataHex}`);
+    }
+    const [nameBytes, innerData] = decoded.args as [`0x${string}`, `0x${string}`];
+    //const [nameBytes, innerData] = args;
     if (!innerData) {
       throw new Error('Invalid CCIP-read: innerData missing');
     }
