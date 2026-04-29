@@ -118,30 +118,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ par
     console.log("rawCalldata:", rawCalldata);
     console.log("calldataHex:", calldataHex);
 
-    // this failed
-    /* 
-    const hex = rawCalldata.replace(/^0x/, '');
-    // Skip 4-byte function selector (resolve(bytes,bytes) = 0x9061b923)
-    const argsHex = `0x${hex.slice(8)}` as `0x${string}`;
-    const [nameBytes, innerData] = decodeAbiParameters(
-      [{ type: 'bytes' }, { type: 'bytes' }],
-      argsHex,
-    );
- */
-/*     const { args } = decodeFunctionData({
-      abi: [{
-        name: 'resolve',
-        type: 'function',
-        stateMutability: 'view',
-        inputs: [
-          { name: 'name', type: 'bytes' },
-          { name: 'data', type: 'bytes' },
-        ],
-        //outputs: [{ type: 'bytes' }],
-      }],
-      data: calldataHex,
-    });
- */
     const decoded = decodeFunctionData({
       abi: [{
         name: 'resolve',
@@ -159,7 +135,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ par
       throw new Error(`Failed to decode function data: ${calldataHex}`);
     }
     const [nameBytes, innerData] = decoded.args as [`0x${string}`, `0x${string}`];
-    //const [nameBytes, innerData] = args;
     if (!innerData) {
       throw new Error('Invalid CCIP-read: innerData missing');
     }
@@ -184,6 +159,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ par
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
+    const oraclePk = process.env.ORACLE_PK;
+    if (!oraclePk) {
+      console.error('ORACLE_PK env var not set');
+      return NextResponse.json({ error: 'Oracle not configured' }, { status: 503 });
+    }
+
     const expires = BigInt(Math.floor(Date.now() / 1000) + 300);
     const result = buildResult(innerSelector, cid);
 
@@ -192,7 +173,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ par
       ['0x1900', sender, expires, keccak256(calldataHex), keccak256(result)],
     ));
 
-    const account = privateKeyToAccount(process.env.ORACLE_PK as `0x${string}`);
+    const account = privateKeyToAccount(oraclePk as `0x${string}`);
     const sig = await account.sign({ hash: sigHash });
 
     const encoded = encodeAbiParameters(
