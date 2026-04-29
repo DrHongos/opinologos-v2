@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { WalletButton } from "@/components/wallet-button";
+import Faucet from "@/components/faucet";
 
 export default function Home() {
   const mcp_link="claude mcp add di --transport http https://opinologos-v2.vercel.app/api/mcp"
@@ -152,20 +153,49 @@ export default function Home() {
 
         </div>
 
-        {/* Decorative rule */}
-        <div
-          style={{
-            marginTop: '5rem',
-            display: 'grid grid-col',
-            alignItems: 'center',
-            gap: '1rem',
-            width: '100%',
-            maxWidth: '24rem',
-          }}
-        >
-          <a className="resource" target="_blank" rel="nofollow" href="https://conditional-tokens.readthedocs.io/en/latest/">Gnosis conditional token framework</a>
-          <a className="resource" target="_blank" rel="nofollow" href="https://developers.uniswap.org/docs/get-started/quickstart">Uniswap-ai</a>
+      <div className="mt-20 w-full max-w-sm mx-auto flex flex-col gap-4">
+        {/* Faucet section */}
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-950/60 p-4 shadow-lg backdrop-blur">
+          <Faucet />
         </div>
+
+        {/* Links section */}
+        <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4 shadow-lg">
+          <div className="mb-3 text-sm font-medium text-zinc-400">
+            Resources
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <a
+              className="rounded-xl px-3 py-2 text-sm text-zinc-200 bg-zinc-900/60 hover:bg-zinc-800 hover:text-white transition-all duration-200 border border-zinc-800"
+              target="_blank"
+              rel="nofollow noreferrer"
+              href="https://ethglobal.com/faucet/unichain-sepolia-1301"
+            >
+              unichain-sepolia faucet
+            </a>
+
+            <a
+              className="rounded-xl px-3 py-2 text-sm text-zinc-200 bg-zinc-900/60 hover:bg-zinc-800 hover:text-white transition-all duration-200 border border-zinc-800"
+              target="_blank"
+              rel="nofollow noreferrer"
+              href="https://conditional-tokens.readthedocs.io/en/latest/"
+            >
+              Gnosis conditional token framework
+            </a>
+
+            <a
+              className="rounded-xl px-3 py-2 text-sm text-zinc-200 bg-zinc-900/60 hover:bg-zinc-800 hover:text-white transition-all duration-200 border border-zinc-800"
+              target="_blank"
+              rel="nofollow noreferrer"
+              href="https://developers.uniswap.org/docs/get-started/quickstart"
+            >
+              Uniswap AI quickstart
+            </a>
+          </div>
+        </div>
+      </div>
+
       </main>
     </div>
   );
