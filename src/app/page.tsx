@@ -97,7 +97,7 @@ export default function Home() {
         </p>
 
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
-          <WalletButton />
+          {/* <WalletButton /> */}
           <Link
             href="/markets"
             style={{
@@ -156,13 +156,15 @@ export default function Home() {
         <div
           style={{
             marginTop: '5rem',
-            display: 'flex',
+            display: 'grid grid-col',
             alignItems: 'center',
             gap: '1rem',
             width: '100%',
             maxWidth: '24rem',
           }}
         >
+          <a className="resource" target="_blank" rel="nofollow" href="https://conditional-tokens.readthedocs.io/en/latest/">Gnosis conditional token framework</a>
+          <a className="resource" target="_blank" rel="nofollow" href="https://developers.uniswap.org/docs/get-started/quickstart">Uniswap-ai</a>
         </div>
       </main>
     </div>
