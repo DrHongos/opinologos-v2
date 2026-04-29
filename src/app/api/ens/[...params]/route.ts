@@ -114,6 +114,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ par
     const sender = segments[0] as `0x${string}`;
     const rawCalldata = segments[1].replace(/\.json$/, '');
     const calldataHex = (rawCalldata.startsWith('0x') ? rawCalldata : `0x${rawCalldata}`) as `0x${string}`;
+    console.log("segments:", segments);
+    console.log("rawCalldata:", rawCalldata);
+    console.log("calldataHex:", calldataHex);
 
     // this failed
     /* 
