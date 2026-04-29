@@ -104,9 +104,9 @@ function buildResult(selector: string, cid: string | null): `0x${string}` {
   return encodeAbiParameters([{ type: 'string' }], [`ipfs://${cid}`]);
 }
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ params: string[] }> }) {
+export async function GET(_req: NextRequest, { params }: { params: { params: string[] } }) {
   try {
-    const { params: segments } = await params;
+    const { params: segments } = params;
     if (!segments || segments.length < 2) {
       return NextResponse.json({ error: 'Bad request' }, { status: 400 });
     }
@@ -140,6 +140,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ par
     });
 
     const [nameBytes, innerData] = args;
+    if (!innerData) {
+      throw new Error('Invalid CCIP-read: innerData missing');
+    }
     const name = dnsWireDecode(nameBytes as string);
     console.log(`Resolving: ${name}`);
 
@@ -187,6 +190,6 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ par
   }
 }
 
-export async function POST(req: NextRequest, context: { params: Promise<{ params: string[] }> }) {
+export async function POST(req: NextRequest, context: { params: { params: string[] } }) {
   return GET(req, context);
 }
