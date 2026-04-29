@@ -51,6 +51,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ par
       return NextResponse.json({ error: 'Bad request' }, { status: 400 });
     }
 
+
     const sender = segments[0] as `0x${string}`;
     const rawCalldata = segments[1].replace(/\.json$/, '');
     const calldataHex = (rawCalldata.startsWith('0x') ? rawCalldata : `0x${rawCalldata}`) as `0x${string}`;
@@ -65,9 +66,17 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ par
     );
 
     const name = dnsWireDecode(nameBytes as string);
-    const subdomain = name.split('.')[0];
+    console.log(`Resolving: ${name}`);
+    const name_splitted = name.split('.');
+    let cid: string | null;
+    if (name_splitted.length === 2) {
+      cid = 'QmZ5VrTMazqytDGhq445R54X7AHnHcGEQzdaKWUToxnyRD';
 
-    const cid = await findMarketCid(subdomain);
+    } else {
+//    const subdomain = name.split('.')[0];
+      const subdomain = name_splitted[0];
+      cid = await findMarketCid(subdomain);
+    }
     if (!cid) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
