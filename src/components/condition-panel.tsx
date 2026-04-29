@@ -452,6 +452,9 @@ export function ConditionPanel({ condition, osIndex, ptokenAddress, onClose, onT
                 : 'Merge to collateral'}
           </button>
 
+          <div className="chain-guard">
+            if the market is closed you need to redeem your fees <b>before</b> your funds. Otherwise <b>will be lost</b>
+          </div>
           <div className="mg-stat" style={{ marginTop: '1.5rem' }}>
             <span className="mg-stat__label">Accrued fees</span>
             <span className="mg-stat__value">
@@ -463,9 +466,6 @@ export function ConditionPanel({ condition, osIndex, ptokenAddress, onClose, onT
             </span>
           </div>
 
-          <div className="chain-guard">
-            if the market is closed you need to redeem your fees <b>before</b> your funds. Otherwise <b>will be lost</b>
-          </div>
           {feesWithdrawable !== null && feesWithdrawable > 0n && (
             <button
               className="mg-panel__action"
