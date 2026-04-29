@@ -794,7 +794,7 @@ export function CreateMarketWizard() {
           </div>
 
           <div className="cmw__fund-row">
-            <label className="cmw__field-label">Collateral amount (18 decimals)</label>
+            <label className="cmw__field-label">Collateral amount</label>
             <input
               className="cmw__fund-input"
               type="number"

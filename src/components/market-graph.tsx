@@ -500,6 +500,7 @@ export function MarketGraph({ market }: { market: MarketData }) {
       >
         <Background color="rgba(245,245,240,0.04)" variant={BackgroundVariant.Dots} gap={24} />
         <Controls showInteractive={false} />
+        {/* 
         <MiniMap
           nodeColor={n =>
             n.type === 'root'        ? '#f59e0b' :
@@ -509,7 +510,8 @@ export function MarketGraph({ market }: { market: MarketData }) {
             '#2a2a2a'
           }
           maskColor="rgba(13,13,13,0.7)"
-        />
+        /> 
+        */}
       </ReactFlow>
 
       <SwapPanel
