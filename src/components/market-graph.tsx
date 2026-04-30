@@ -18,7 +18,7 @@ import '@xyflow/react/dist/style.css';
 import { createPublicClient, createWalletClient, custom, http, formatUnits } from 'viem';
 import { useWallets } from '@privy-io/react-auth';
 import { getChain } from '@/lib/chain';
-import { FPMM_ABI, LMSR_HOOK_ADDRESS, computeImpliedPrice, outcomeTokenIdLocal } from '@/lib/contracts';
+import { FPMM_ABI, LMSR_HOOK_ADDRESS, COLLATERAL_TOKEN, computeImpliedPrice, outcomeTokenIdLocal } from '@/lib/contracts';
 import { SwapPanel } from './swap-panel';
 import { ConditionPanel } from './condition-panel';
 import { SlotPanel, type SlotInfo } from './slot-panel';
@@ -220,6 +220,7 @@ function buildGraph(
   market: MarketData,
   prices: number[] | null,
   sourcePrices: Record<string, number[]>,
+  sourceOsIndices: Record<string, string>,
   userBalances: Record<number, string>,
   onConditionClick: (c: ConditionInfo) => void,
   onOutcomeClick: (o: Outcome) => void,
@@ -280,8 +281,8 @@ function buildGraph(
       });
 
       // Individual condition outcome (slot) nodes
-      const condSourceOsIndex = cond.os_index ?? '';
-      const condSourcePrices = condSourceOsIndex ? (sourcePrices[condSourceOsIndex] ?? null) : null;
+      const condSourceOsIndex = sourceOsIndices[cond.id] ?? '';
+      const condSourcePrices = sourcePrices[cond.id] ?? null;
 
       for (let slotIdx = 0; slotIdx < cond.slots; slotIdx++) {
         const coId = `co-${ci}-${slotIdx}`;
@@ -423,6 +424,7 @@ export function MarketGraph({ market }: { market: MarketData }) {
   // this only takes into account leaf prices.. we need another check for the n parent outcomes ()
   const [prices, setPrices] = useState<number[] | null>(null);
   const [sourcePrices, setSourcePrices] = useState<Record<string, number[]>>({});
+  const [sourceOsIndices, setSourceOsIndices] = useState<Record<string, string>>({});
   const [userBalances, setUserBalances] = useState<Record<number, string>>({});
   const { wallets } = useWallets();
 
@@ -445,23 +447,27 @@ export function MarketGraph({ market }: { market: MarketData }) {
         .catch(() => {});
     }
 
-    // Fetch source market prices for each condition with its own OS
-    const sourceOsIndices = market.conditions
-      .map(c => c.os_index)
-      .filter((oi): oi is string => !!oi);
-    for (const oi of sourceOsIndices) {
+    // For each condition in a mixed market, compute its source OS index on-chain
+    // (the OS formed by that single condition alone) then fetch pool balances.
+    for (const cond of market.conditions) {
       client.readContract({
         address: LMSR_HOOK_ADDRESS,
         abi: FPMM_ABI,
-        functionName: 'getPoolBalances',
-        args: [oi as `0x${string}`],
+        functionName: 'getOSIndex',
+        args: [COLLATERAL_TOKEN, [cond.id as `0x${string}`]],
       })
-        .then(bals => {
-          const b = bals as bigint[];
-
-          // TODO: this is returning wrong data, like for a 2 outcomes osindex, returns 4 values ???
-          console.log(`${oi} is ${b}`)
-          setSourcePrices(prev => ({ ...prev, [oi]: b.map((_, i) => computeImpliedPrice(b, i)) }));
+        .then(sourceOsIdx => {
+          const oi = sourceOsIdx as `0x${string}`;
+          setSourceOsIndices(prev => ({ ...prev, [cond.id]: oi }));
+          return client.readContract({
+            address: LMSR_HOOK_ADDRESS,
+            abi: FPMM_ABI,
+            functionName: 'getPoolBalances',
+            args: [oi],
+          }).then(bals => {
+            const b = bals as bigint[];
+            setSourcePrices(prev => ({ ...prev, [cond.id]: b.map((_, idx) => computeImpliedPrice(b, idx)) }));
+          });
         })
         .catch(() => {});
     }
@@ -511,12 +517,12 @@ export function MarketGraph({ market }: { market: MarketData }) {
   const { rawNodes, rawEdges } = useMemo(
     () => {
       const { nodes, edges } = buildGraph(
-        market, prices, sourcePrices, userBalances, setActiveCondition, handleOutcomeClick, openPoolPanel, setActiveSlot,
+        market, prices, sourcePrices, sourceOsIndices, userBalances, setActiveCondition, handleOutcomeClick, openPoolPanel, setActiveSlot,
       );
       return { rawNodes: nodes, rawEdges: edges };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [market.id ?? market.condition_id, prices, sourcePrices, userBalances],
+    [market.id ?? market.condition_id, prices, sourcePrices, sourceOsIndices, userBalances],
   );
 
   const nodes = useMemo(
