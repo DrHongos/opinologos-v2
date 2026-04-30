@@ -94,7 +94,7 @@ export default function Home() {
             marginBottom: '3rem',
           }}
         >
-          Cast verifiable votes. Build credibility. Shape the discourse — wallet-first.
+          Cast verifiable votes. Build credibility. Shape the discourse — users & agents based.
         </p>
 
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
@@ -149,6 +149,16 @@ export default function Home() {
             <code id="mcp-link" className="text-sm text-gray-800 truncate">
               {mcp_link}
             </code>
+          </div>
+          <div className="mt-3 mb-2">
+            <a
+              className="rounded-xl px-3 py-2 text-sm text-zinc-200 bg-zinc-900/60 hover:bg-zinc-800 hover:text-white transition-all duration-200 border border-zinc-800"
+              target="_blank"
+              rel="nofollow noreferrer"
+              href="https://agents.declareindependence.eth.link/"
+            >
+              AGENTS.declareindependence.eth
+            </a>
           </div>
 
         </div>
