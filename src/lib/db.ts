@@ -101,6 +101,33 @@ export async function initSchema() {
   `;
   await sql`CREATE INDEX IF NOT EXISTS agent_events_market_idx ON agent_events (market_id)`;
   await sql`CREATE INDEX IF NOT EXISTS agent_events_created_idx ON agent_events (created_at DESC)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS user_trades (
+      id              TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      market_id       TEXT NOT NULL REFERENCES markets(id),
+      user_address    TEXT NOT NULL,
+      direction       TEXT NOT NULL,
+      outcome_index   INTEGER,
+      amount_usdc     NUMERIC NOT NULL,
+      token_amount    TEXT,
+      tx_hash         TEXT NOT NULL,
+      created_at      TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS user_trades_txhash_idx ON user_trades (tx_hash)`;
+  await sql`CREATE INDEX IF NOT EXISTS user_trades_market_user_idx ON user_trades (market_id, user_address)`;
+
+  await sql`
+    CREATE TABLE IF NOT EXISTS market_price_snapshots (
+      id            TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+      market_id     TEXT NOT NULL REFERENCES markets(id),
+      outcome_index INTEGER NOT NULL,
+      price         NUMERIC NOT NULL,
+      recorded_at   TIMESTAMPTZ DEFAULT NOW()
+    )
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS price_snapshots_market_time_idx ON market_price_snapshots (market_id, recorded_at DESC)`;
 }
 
 export interface AgentEventData {
@@ -111,6 +138,47 @@ export interface AgentEventData {
   txHash?: string;
   tradeAmountUsdc?: number;
   probabilityDelta?: number;
+}
+
+export interface UserTradeData {
+  userAddress: string;
+  direction: string;
+  outcomeIndex?: number | null;
+  amountUsdc: string;
+  tokenAmount?: string | null;
+  txHash: string;
+}
+
+export async function insertUserTrade(marketId: string, data: UserTradeData): Promise<void> {
+  try {
+    await sql`
+      INSERT INTO user_trades (market_id, user_address, direction, outcome_index, amount_usdc, token_amount, tx_hash)
+      VALUES (
+        ${marketId},
+        ${data.userAddress.toLowerCase()},
+        ${data.direction},
+        ${data.outcomeIndex ?? null},
+        ${data.amountUsdc},
+        ${data.tokenAmount ?? null},
+        ${data.txHash}
+      )
+      ON CONFLICT (tx_hash) DO NOTHING
+    `;
+  } catch {
+    // Silently ignore errors
+  }
+}
+
+export async function insertPriceSnapshots(
+  marketId: string,
+  prices: { outcomeIndex: number; price: number }[],
+): Promise<void> {
+  for (const { outcomeIndex, price } of prices) {
+    await sql`
+      INSERT INTO market_price_snapshots (market_id, outcome_index, price)
+      VALUES (${marketId}, ${outcomeIndex}, ${price})
+    `.catch(() => {});
+  }
 }
 
 export async function insertAgentEvent(

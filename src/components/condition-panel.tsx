@@ -21,6 +21,7 @@ interface ConditionInfo {
 interface ConditionPanelProps {
   condition: ConditionInfo | null;
   osIndex: string;
+  slug: string;
   ptokenAddress: string;
   onClose: () => void;
   onTxSuccess?: () => void;
@@ -36,7 +37,7 @@ function copyToClipboard(text: string) {
   navigator.clipboard.writeText(text).catch(() => {});
 }
 
-export function ConditionPanel({ condition, osIndex, ptokenAddress, onClose, onTxSuccess }: ConditionPanelProps) {
+export function ConditionPanel({ condition, osIndex, slug, ptokenAddress, onClose, onTxSuccess }: ConditionPanelProps) {
   const isOpen = condition !== null;
   // POOL_SENTINEL: id === '' means pool-management mode (opened from root node)
   const isPoolMode = isOpen && condition!.id === '';
@@ -160,6 +161,13 @@ export function ConditionPanel({ condition, osIndex, ptokenAddress, onClose, onT
       });
       await publicClient.waitForTransactionReceipt({ hash: liqTx });
 
+      if (slug) {
+        fetch(`/api/markets/${slug}/record-activity`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ txHash: liqTx, userAddress: account, direction: 'add_liquidity', amountUsdc: amount }),
+        }).catch(() => {});
+      }
       setAmount('');
       await fetchStats();
       onTxSuccess?.();
@@ -189,6 +197,13 @@ export function ConditionPanel({ condition, osIndex, ptokenAddress, onClose, onT
       });
       await publicClient.waitForTransactionReceipt({ hash: tx });
 
+      if (slug) {
+        fetch(`/api/markets/${slug}/record-activity`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ txHash: tx, userAddress: account, direction: 'remove_liquidity', amountUsdc: amount }),
+        }).catch(() => {});
+      }
       setAmount('');
       await fetchStats();
       onTxSuccess?.();
@@ -213,6 +228,15 @@ export function ConditionPanel({ condition, osIndex, ptokenAddress, onClose, onT
         chain: getChain(),
       });
       await publicClient.waitForTransactionReceipt({ hash: tx });
+
+      if (slug) {
+        const feesAmt = feesWithdrawable != null ? formatUnits(feesWithdrawable, 18) : '0';
+        fetch(`/api/markets/${slug}/record-activity`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ txHash: tx, userAddress: account, direction: 'withdraw_fees', amountUsdc: feesAmt }),
+        }).catch(() => {});
+      }
       await fetchStats();
       onTxSuccess?.();
     } catch (e: unknown) {
@@ -260,6 +284,13 @@ export function ConditionPanel({ condition, osIndex, ptokenAddress, onClose, onT
       });
       await publicClient.waitForTransactionReceipt({ hash: tx });
 
+      if (slug) {
+        fetch(`/api/markets/${slug}/record-activity`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ txHash: tx, userAddress: account, direction: 'split_collateral', amountUsdc: amount }),
+        }).catch(() => {});
+      }
       setAmount('');
       await fetchStats();
       onTxSuccess?.();
@@ -308,6 +339,13 @@ export function ConditionPanel({ condition, osIndex, ptokenAddress, onClose, onT
       });
       await publicClient.waitForTransactionReceipt({ hash: tx });
 
+      if (slug) {
+        fetch(`/api/markets/${slug}/record-activity`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ txHash: tx, userAddress: account, direction: 'merge_collateral', amountUsdc: amount }),
+        }).catch(() => {});
+      }
       setAmount('');
       await fetchStats();
       onTxSuccess?.();

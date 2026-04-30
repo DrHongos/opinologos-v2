@@ -38,6 +38,7 @@ interface ConditionInfo {
 
 interface MarketData {
   id?: string;
+  slug?: string;
   question: string;
   description: string | null;
   os_index: string;
@@ -517,11 +518,13 @@ export function MarketGraph({ market }: { market: MarketData }) {
       <SwapPanel
         outcome={activeOutcome}
         osIndex={activeOutcomeOsIndex}
+        slug={market.slug ?? ''}
         onClose={onClose}
         onTxSuccess={fetchPrices}
       />
       <SlotPanel
         slot={activeSlot}
+        slug={market.slug ?? ''}
         onClose={onClose}
         onTradeOutcome={(o, osIdx) => {
           setActiveSlot(null);
@@ -533,6 +536,7 @@ export function MarketGraph({ market }: { market: MarketData }) {
       <ConditionPanel
         condition={activeCondition}
         osIndex={market.os_index}
+        slug={market.slug ?? ''}
         ptokenAddress={market.outcomes[0]?.tokenAddress ?? ''}
         onClose={onClose}
         onTxSuccess={fetchPrices}

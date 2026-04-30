@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { keccak256 } from 'viem';
-import { sql, insertAgentEvent, initSchema } from '@/lib/db';
+import { sql, insertAgentEvent, insertPriceSnapshots, initSchema } from '@/lib/db';
 import { getOracleWalletClient, getPublicClient } from '@/lib/oracle-client';
 import { executeNudgeTrade, computeTradeSize, MAX_TRADE_WEI, PROB_THRESHOLD } from '@/lib/agent-swap';
 import { FPMM_ABI, LMSR_HOOK_ADDRESS, computeImpliedPrice } from '@/lib/contracts';
@@ -200,6 +200,21 @@ export async function GET(req: NextRequest) {
                 tradeAmountUsdc: tradeUsdc,
                 probabilityDelta: delta,
               });
+
+              // Record post-trade price snapshot for history chart
+              const postBals = await publicClient.readContract({
+                address: LMSR_HOOK_ADDRESS,
+                abi: FPMM_ABI,
+                functionName: 'getPoolBalances',
+                args: [market.os_index as `0x${string}`],
+              }).catch(() => null) as bigint[] | null;
+              if (postBals) {
+                await insertPriceSnapshots(
+                  market.id,
+                  postBals.map((_, i) => ({ outcomeIndex: i, price: computeImpliedPrice(postBals, i) })),
+                ).catch(() => {});
+              }
+
               log.nudged.push(market.slug);
               continue;
             }

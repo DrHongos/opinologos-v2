@@ -36,6 +36,7 @@ interface Outcome {
 interface SwapPanelProps {
   outcome: Outcome | null;
   osIndex: string;
+  slug: string;
   onClose: () => void;
   onTxSuccess?: () => void;
 }
@@ -140,7 +141,7 @@ function fmtTokens(v: bigint) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
-export function SwapPanel({ outcome, osIndex, onClose, onTxSuccess }: SwapPanelProps) {
+export function SwapPanel({ outcome, osIndex, slug, onClose, onTxSuccess }: SwapPanelProps) {
   const isOpen = outcome !== null;
   const [direction, setDirection] = useState<'buy' | 'sell'>('buy');
   const [amount, setAmount] = useState('');
@@ -161,8 +162,8 @@ export function SwapPanel({ outcome, osIndex, onClose, onTxSuccess }: SwapPanelP
 
   const publicClient = createPublicClient({ chain: getChain(), transport: http() });
 
-  const fetchData = useCallback(async () => {
-    if (!outcome || !osIndex) return;
+  const fetchData = useCallback(async (): Promise<bigint[] | null> => {
+    if (!outcome || !osIndex) return null;
     setLoadingData(true);
     try {
       const wallet = wallets[0];
@@ -185,6 +186,7 @@ export function SwapPanel({ outcome, osIndex, onClose, onTxSuccess }: SwapPanelP
       if (slot !== null) setFeeSlot(Number(slot));
       if (userOutcome !== null) setUserOutcomeBal(userOutcome as bigint);
       if (collateral !== null) setCollateralBal(collateral as bigint);
+      return bals as bigint[] | null;
     } finally {
       setLoadingData(false);
     }
@@ -231,6 +233,8 @@ export function SwapPanel({ outcome, osIndex, onClose, onTxSuccess }: SwapPanelP
       const hookData = encodeAbiParameters([{ type: 'address' }] as const, [account]);
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 300);
 
+      let txHash: `0x${string}` | null = null;
+
       if (direction === 'buy') {
         // Ensure ERC-20 → Permit2 approval (one-time max approval)
         const erc20Allowance = await publicClient.readContract({
@@ -273,6 +277,7 @@ export function SwapPanel({ outcome, osIndex, onClose, onTxSuccess }: SwapPanelP
           account, chain: getChain(), gas: 2_000_000n,
         });
         await publicClient.waitForTransactionReceipt({ hash: tx });
+        txHash = tx;
 
       } else {
         // Sell: ensure hook is approved as operator to burn outcome tokens
@@ -300,10 +305,27 @@ export function SwapPanel({ outcome, osIndex, onClose, onTxSuccess }: SwapPanelP
           account, chain: getChain(), gas: 2_000_000n,
         });
         await publicClient.waitForTransactionReceipt({ hash: tx });
+        txHash = tx;
       }
 
       setAmount('');
-      await fetchData();
+      const newBals = await fetchData();
+      if (txHash && slug && outcome) {
+        const prices = newBals ? newBals.map((_, i) => computeImpliedPrice(newBals, i)) : undefined;
+        fetch(`/api/markets/${slug}/record-activity`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            txHash,
+            userAddress: account,
+            direction,
+            outcomeIndex: outcome.outcomeIndex,
+            amountUsdc: amount,
+            tokenAmount: quote?.toString() ?? null,
+            prices,
+          }),
+        }).catch(() => {});
+      }
       onTxSuccess?.();
     } catch (e: unknown) {
       setTxError(e instanceof Error ? e.message : String(e));

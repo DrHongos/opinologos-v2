@@ -29,6 +29,7 @@ export interface SlotInfo {
 
 interface SlotPanelProps {
   slot: SlotInfo | null;
+  slug: string;
   onClose: () => void;
   onTradeOutcome: (o: Outcome, osIndex: string) => void;
   onTxSuccess?: () => void;
@@ -36,7 +37,7 @@ interface SlotPanelProps {
 
 type Tab = 'split' | 'merge';
 
-export function SlotPanel({ slot, onClose, onTradeOutcome, onTxSuccess }: SlotPanelProps) {
+export function SlotPanel({ slot, slug, onClose, onTradeOutcome, onTxSuccess }: SlotPanelProps) {
   const isOpen = slot !== null;
   const [tab, setTab] = useState<Tab>('split');
   const [amount, setAmount] = useState('');
@@ -95,6 +96,14 @@ export function SlotPanel({ slot, onClose, onTradeOutcome, onTxSuccess }: SlotPa
         gas: 2_000_000n,
       });
       await publicClient.waitForTransactionReceipt({ hash: tx });
+
+      if (slug) {
+        fetch(`/api/markets/${slug}/record-activity`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ txHash: tx, userAddress: account, direction: 'split_position', amountUsdc: amount }),
+        }).catch(() => {});
+      }
       setAmount('');
       onTxSuccess?.();
     } catch (e) {
@@ -141,6 +150,14 @@ export function SlotPanel({ slot, onClose, onTradeOutcome, onTxSuccess }: SlotPa
         gas: 2_000_000n,
       });
       await publicClient.waitForTransactionReceipt({ hash: tx });
+
+      if (slug) {
+        fetch(`/api/markets/${slug}/record-activity`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ txHash: tx, userAddress: account, direction: 'merge_position', amountUsdc: amount }),
+        }).catch(() => {});
+      }
       setAmount('');
       onTxSuccess?.();
     } catch (e) {

@@ -5,6 +5,8 @@ import { MarketGraph } from '@/components/market-graph';
 import { CidRow } from '@/components/cid-row';
 import { MarketStatus } from '@/components/market-status';
 import { AgentHistory } from '@/components/agent-history';
+import { PriceHistoryChart } from '@/components/price-history-chart';
+import { UserTradeHistory } from '@/components/user-trade-history';
 import { sql } from '@/lib/db';
 
 interface Outcome {
@@ -159,6 +161,17 @@ export default async function MarketDetailPage({
 
       <div className="md-graph-wrap">
         <MarketGraph market={market} />
+      </div>
+
+      <div className="md-status-wrap">
+        <PriceHistoryChart
+          slug={slug}
+          outcomeLabels={market.outcomes.map(o => o.label ?? String(o.outcomeIndex))}
+        />
+      </div>
+
+      <div className="md-status-wrap">
+        <UserTradeHistory slug={slug} />
       </div>
 
       <div className="md-status-wrap">
