@@ -379,7 +379,23 @@ export function SwapPanel({ outcome, osIndex, slug, onClose, onTxSuccess }: Swap
           </div>
 
           <div className="mg-field">
-            <label className="mg-field__label">{direction === 'buy' ? 'Collateral in' : 'Collateral to receive'}</label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.25rem' }}>
+              <label className="mg-field__label" style={{ margin: 0 }}>{direction === 'buy' ? 'Collateral in' : 'Collateral to receive'}</label>
+              {direction === 'buy' && collateralBal !== null && collateralBal > 0n && (
+                <button
+                  style={{ fontSize: '0.7rem', color: '#14b8a6', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  onClick={() => setAmount(parseFloat(formatUnits(collateralBal, 18)).toFixed(6).replace(/\.?0+$/, ''))}
+                  disabled={txPending}
+                >
+                  Max {fmtTokens(collateralBal)}
+                </button>
+              )}
+              {direction === 'sell' && userOutcomeBal !== null && userOutcomeBal > 0n && (
+                <span style={{ fontSize: '0.7rem', color: 'rgba(245,245,240,0.4)' }}>
+                  You have {fmtTokens(userOutcomeBal)} tokens
+                </span>
+              )}
+            </div>
             <input className="mg-field__input" type="number" min="0" step="any" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} disabled={txPending} />
           </div>
 

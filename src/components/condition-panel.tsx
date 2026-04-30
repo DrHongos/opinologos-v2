@@ -46,6 +46,7 @@ export function ConditionPanel({ condition, osIndex, slug, ptokenAddress, onClos
   const [feesWithdrawable, setFeesWithdrawable] = useState<bigint | null>(null);
   const [userLpBalance, setUserLpBalance] = useState<bigint | null>(null);
   const [lpTotalSupply, setLpTotalSupply] = useState<bigint | null>(null);
+  const [collateralBal, setCollateralBal] = useState<bigint | null>(null);
   const [loadingBal, setLoadingBal] = useState(false);
   const [txPending, setTxPending] = useState(false);
   const [txError, setTxError] = useState<string | null>(null);
@@ -66,7 +67,7 @@ export function ConditionPanel({ condition, osIndex, slug, ptokenAddress, onClos
 
       const lpId = lpTokenIdLocal(osIndex as `0x${string}`);
 
-      const [osInfo, fees, lpBal] = await Promise.all([
+      const [osInfo, fees, lpBal, collBal] = await Promise.all([
         publicClient.readContract({
           address: LMSR_HOOK_ADDRESS,
           abi: FPMM_ABI,
@@ -89,6 +90,14 @@ export function ConditionPanel({ condition, osIndex, slug, ptokenAddress, onClos
               args: [account, lpId],
             }).catch(() => null)
           : Promise.resolve(null),
+        account
+          ? publicClient.readContract({
+              address: COLLATERAL_TOKEN,
+              abi: ERC20_ABI,
+              functionName: 'balanceOf',
+              args: [account],
+            }).catch(() => null)
+          : Promise.resolve(null),
       ]);
 
       if (osInfo) {
@@ -97,6 +106,7 @@ export function ConditionPanel({ condition, osIndex, slug, ptokenAddress, onClos
       }
       if (fees !== null) setFeesWithdrawable(fees as bigint);
       if (lpBal !== null) setUserLpBalance(lpBal as bigint);
+      if (collBal !== null) setCollateralBal(collBal as bigint);
     } catch {
       setLpTotalSupply(null);
     } finally {
@@ -457,12 +467,32 @@ export function ConditionPanel({ condition, osIndex, slug, ptokenAddress, onClos
           )}
 
           <div className="mg-field">
-            <label className="mg-field__label">
-              {tab === 'add' ? 'Collateral amount' :
-               tab === 'remove' ? 'LP tokens to redeem' :
-               tab === 'split' ? 'Collateral to split' :
-               'Outcome amount (each)'}
-            </label>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.25rem' }}>
+              <label className="mg-field__label" style={{ margin: 0 }}>
+                {tab === 'add' ? 'Collateral amount' :
+                 tab === 'remove' ? 'LP tokens to redeem' :
+                 tab === 'split' ? 'Collateral to split' :
+                 'Outcome amount (each)'}
+              </label>
+              {tab === 'remove' && userLpBalance !== null && userLpBalance > 0n && (
+                <button
+                  style={{ fontSize: '0.7rem', color: '#14b8a6', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  onClick={() => setAmount(parseFloat(formatUnits(userLpBalance, 18)).toFixed(6).replace(/\.?0+$/, ''))}
+                  disabled={txPending}
+                >
+                  Max {parseFloat(formatUnits(userLpBalance, 18)).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                </button>
+              )}
+              {tab === 'split' && collateralBal !== null && collateralBal > 0n && (
+                <button
+                  style={{ fontSize: '0.7rem', color: '#14b8a6', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                  onClick={() => setAmount(parseFloat(formatUnits(collateralBal, 18)).toFixed(6).replace(/\.?0+$/, ''))}
+                  disabled={txPending}
+                >
+                  Max {parseFloat(formatUnits(collateralBal, 18)).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                </button>
+              )}
+            </div>
             <input
               className="mg-field__input"
               type="number"

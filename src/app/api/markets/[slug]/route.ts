@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { sql, initSchema } from '@/lib/db';
+import type { NextRequest } from 'next/server';
 
 let schemaReady = false;
 
@@ -10,10 +11,11 @@ async function ensureSchema() {
 }
 
 export async function GET(
-  _req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ slug: string }> },
 ) {
   const { slug } = await params;
+  const address = req.nextUrl.searchParams.get('address')?.toLowerCase() ?? null;
 
   try {
     await ensureSchema();
@@ -69,7 +71,23 @@ export async function GET(
       conditions = conditions.map(c => ({ ...c, os_index: srcOsMap[c.id] ?? null }));
     }
 
-    return NextResponse.json({ market: { ...market, outcomes, conditions } });
+    // User positions from trade history (optional, requires ?address=)
+    let userPositions: Record<string, unknown>[] = [];
+    if (address) {
+      const { rows: posRows } = await sql.query(
+        `SELECT direction, outcome_index,
+                SUM(amount_usdc) AS total_usdc,
+                COUNT(*)::int     AS trade_count
+         FROM user_trades
+         WHERE market_id = $1 AND user_address = $2
+         GROUP BY direction, outcome_index
+         ORDER BY outcome_index, direction`,
+        [market.id, address],
+      );
+      userPositions = posRows;
+    }
+
+    return NextResponse.json({ market: { ...market, outcomes, conditions }, userPositions });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'DB error' },

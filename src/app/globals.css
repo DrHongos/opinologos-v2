@@ -2177,6 +2177,12 @@ a.ms-card:hover {
   margin-top: 0.15rem;
 }
 
+.mg-node__balance {
+  font-size: 0.65rem;
+  color: #14b8a6;
+  margin-top: 0.1rem;
+}
+
 /* React Flow handle overrides */
 .mg-canvas .react-flow__handle {
   background: var(--border);

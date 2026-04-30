@@ -15,9 +15,10 @@ import {
 } from '@xyflow/react';
 import dagre from '@dagrejs/dagre';
 import '@xyflow/react/dist/style.css';
-import { createPublicClient, http } from 'viem';
+import { createPublicClient, createWalletClient, custom, http, formatUnits } from 'viem';
+import { useWallets } from '@privy-io/react-auth';
 import { getChain } from '@/lib/chain';
-import { FPMM_ABI, LMSR_HOOK_ADDRESS, computeImpliedPrice } from '@/lib/contracts';
+import { FPMM_ABI, LMSR_HOOK_ADDRESS, computeImpliedPrice, outcomeTokenIdLocal } from '@/lib/contracts';
 import { SwapPanel } from './swap-panel';
 import { ConditionPanel } from './condition-panel';
 import { SlotPanel, type SlotInfo } from './slot-panel';
@@ -83,6 +84,7 @@ interface OutcomeNodeData extends Record<string, unknown> {
   outcome: Outcome;
   combinedLabel: string;
   price: number | null;
+  userBalance: string | null;
   onOpen: () => void;
 }
 
@@ -156,6 +158,9 @@ function OutcomeNode({ data }: NodeProps) {
       {d.price !== null && (
         <span className="mg-node__price">{d.price.toFixed(4)} col</span>
       )}
+      {d.userBalance && (
+        <span className="mg-node__balance">You: {d.userBalance}</span>
+      )}
       <span className="mg-node__hint">Click to trade</span>
     </div>
   );
@@ -215,6 +220,7 @@ function buildGraph(
   market: MarketData,
   prices: number[] | null,
   sourcePrices: Record<string, number[]>,
+  userBalances: Record<number, string>,
   onConditionClick: (c: ConditionInfo) => void,
   onOutcomeClick: (o: Outcome) => void,
   onPoolOpen: () => void,
@@ -332,6 +338,7 @@ function buildGraph(
           outcome,
           combinedLabel,
           price: prices ? (prices[outcome.outcomeIndex] ?? null) : null,
+          userBalance: userBalances[outcome.outcomeIndex] ?? null,
           onOpen: () => onOutcomeClick(outcome),
         } satisfies OutcomeNodeData,
         draggable: false,
@@ -386,6 +393,7 @@ function buildGraph(
           outcome,
           combinedLabel,
           price: prices ? (prices[outcome.outcomeIndex] ?? null) : null,
+          userBalance: userBalances[outcome.outcomeIndex] ?? null,
           onOpen: () => onOutcomeClick(outcome),
         } satisfies OutcomeNodeData,
         draggable: false,
@@ -415,6 +423,8 @@ export function MarketGraph({ market }: { market: MarketData }) {
   // this only takes into account leaf prices.. we need another check for the n parent outcomes ()
   const [prices, setPrices] = useState<number[] | null>(null);
   const [sourcePrices, setSourcePrices] = useState<Record<string, number[]>>({});
+  const [userBalances, setUserBalances] = useState<Record<number, string>>({});
+  const { wallets } = useWallets();
 
   const fetchPrices = useCallback(() => {
     const client = createPublicClient({ chain: getChain(), transport: http() });
@@ -429,7 +439,7 @@ export function MarketGraph({ market }: { market: MarketData }) {
       })
         .then(bals => {
           const b = bals as bigint[];
-          console.log(`${market.os_index} is ${b}`)
+          //console.log(`${market.os_index} is ${b}`)
           setPrices(b.map((_, i) => computeImpliedPrice(b, i)));
         })
         .catch(() => {});
@@ -448,6 +458,8 @@ export function MarketGraph({ market }: { market: MarketData }) {
       })
         .then(bals => {
           const b = bals as bigint[];
+
+          // TODO: this is returning wrong data, like for a 2 outcomes osindex, returns 4 values ???
           console.log(`${oi} is ${b}`)
           setSourcePrices(prev => ({ ...prev, [oi]: b.map((_, i) => computeImpliedPrice(b, i)) }));
         })
@@ -455,7 +467,39 @@ export function MarketGraph({ market }: { market: MarketData }) {
     }
   }, [market.os_index, market.conditions]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { fetchPrices(); }, [fetchPrices]);
+  const fetchUserBalances = useCallback(async () => {
+    const wallet = wallets[0];
+    if (!wallet || !market.outcomes.length || !market.os_index) return;
+    try {
+      const provider = await wallet.getEthereumProvider();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const wc = createWalletClient({ chain: getChain(), transport: custom(provider as any) });
+      const [account] = await wc.getAddresses();
+      const pc = createPublicClient({ chain: getChain(), transport: http() });
+
+      const results = await Promise.all(
+        market.outcomes.map(async o => {
+          const tokenId = outcomeTokenIdLocal(market.os_index as `0x${string}`, o.outcomeIndex);
+          const bal = await pc.readContract({
+            address: LMSR_HOOK_ADDRESS, abi: FPMM_ABI, functionName: 'balanceOf',
+            args: [account, tokenId],
+          }).catch(() => 0n) as bigint;
+          return { outcomeIndex: o.outcomeIndex, balance: bal };
+        }),
+      );
+
+      const next: Record<number, string> = {};
+      for (const { outcomeIndex, balance } of results) {
+        if (balance > 0n) {
+          const n = parseFloat(formatUnits(balance, 18));
+          next[outcomeIndex] = n < 0.0001 ? '<0.0001' : n.toLocaleString(undefined, { maximumFractionDigits: 4 });
+        }
+      }
+      setUserBalances(next);
+    } catch {}
+  }, [wallets, market.os_index, market.outcomes]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { fetchPrices(); fetchUserBalances(); }, [fetchPrices, fetchUserBalances]);
 
   const openPoolPanel = useCallback(() => setActiveCondition(POOL_SENTINEL), []);
 
@@ -467,12 +511,12 @@ export function MarketGraph({ market }: { market: MarketData }) {
   const { rawNodes, rawEdges } = useMemo(
     () => {
       const { nodes, edges } = buildGraph(
-        market, prices, sourcePrices, setActiveCondition, handleOutcomeClick, openPoolPanel, setActiveSlot,
+        market, prices, sourcePrices, userBalances, setActiveCondition, handleOutcomeClick, openPoolPanel, setActiveSlot,
       );
       return { rawNodes: nodes, rawEdges: edges };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [market.id ?? market.condition_id, prices, sourcePrices],
+    [market.id ?? market.condition_id, prices, sourcePrices, userBalances],
   );
 
   const nodes = useMemo(
@@ -520,7 +564,7 @@ export function MarketGraph({ market }: { market: MarketData }) {
         osIndex={activeOutcomeOsIndex}
         slug={market.slug ?? ''}
         onClose={onClose}
-        onTxSuccess={fetchPrices}
+        onTxSuccess={() => { fetchPrices(); fetchUserBalances(); }}
       />
       <SlotPanel
         slot={activeSlot}
@@ -531,7 +575,7 @@ export function MarketGraph({ market }: { market: MarketData }) {
           setActiveOutcome(o);
           setActiveOutcomeOsIndex(osIdx);
         }}
-        onTxSuccess={fetchPrices}
+        onTxSuccess={() => { fetchPrices(); fetchUserBalances(); }}
       />
       <ConditionPanel
         condition={activeCondition}
@@ -539,7 +583,7 @@ export function MarketGraph({ market }: { market: MarketData }) {
         slug={market.slug ?? ''}
         ptokenAddress={market.outcomes[0]?.tokenAddress ?? ''}
         onClose={onClose}
-        onTxSuccess={fetchPrices}
+        onTxSuccess={() => { fetchPrices(); fetchUserBalances(); }}
       />
     </div>
   );
