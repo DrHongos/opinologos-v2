@@ -4,6 +4,8 @@
 
 FPMM prediction market dApp on Unichain Sepolia. Markets are outcome spaces (OS) on `FPMMHook.sol` — a Uniswap v4 hook where each outcome is a pool, trades are swaps, and all tokens are ERC-6909 on the hook contract.
 
+ENS domain: `*.declareindependence.eth` (CCIP-Read gateway at `/api/ens/[...params]`).
+
 ## Chain & Addresses
 
 All addresses come from env vars, resolved in `src/lib/contracts.ts` and `src/lib/chain.ts`.
@@ -21,7 +23,7 @@ All addresses come from env vars, resolved in `src/lib/contracts.ts` and `src/li
 ## Key Library Files
 
 - `src/lib/contracts.ts` — FPMM_ABI, ERC20_ABI, PERMIT2_ABI, UNIVERSAL_ROUTER_ABI, `outcomeTokenIdLocal`, `lpTokenIdLocal`, `computeImpliedPrice`
-- `src/lib/tx-builder.ts` — All unsigned tx builders: `buildTradeTxs`, `buildSplitCollateralTxs`, `buildMergeCollateralTxs`, `buildSplitPositionTxs`, `buildMergePositionTxs`, `buildRedeemTxs`, `buildAddLiquidityTxs`, `buildRemoveLiquidityTxs`, `buildWithdrawFeesTxs`. Amounts are bigint wei; use `parseUsdcToWei(str)` to convert.
+- `src/lib/tx-builder.ts` — All unsigned tx builders: `buildTradeTxs`, `buildSplitCollateralTxs`, `buildMergeCollateralTxs`, `buildSplitPositionTxs`, `buildMergePositionTxs`, `buildRedeemTxs`, `buildAddLiquidityTxs`, `buildRemoveLiquidityTxs`, `buildWithdrawFeesTxs`. Amounts are bigint wei; use `parseUsdcToWei(str)` to convert. `UnsignedTx` interface: `{ to, data, value, description, optional? }`.
 - `src/lib/oracle-client.ts` — `getPublicClient()`, `getOracleWalletClient()`, `getOracleAccount()`
 - `src/lib/chain.ts` — `getChain()`, `TARGET_CHAIN_ID`
 - `src/lib/db.ts` — `sql` tagged-template Postgres client; schema: `markets`, `market_tokens`, `agent_events`
@@ -48,7 +50,7 @@ Use the on-chain `getOSIndex(collateral, subConditions[])` pure function — alr
 
 ## MCP Server
 
-`src/app/api/mcp/route.ts` — stateless per-request McpServer with 19 tools:
+`src/app/api/mcp/route.ts` — stateless per-request McpServer with 19 tools. Transport: HTTP Streamable (`WebStandardStreamableHTTPServerTransport`), no session state.
 
 **Discovery & state:** `list_markets`, `read_market`, `get_price`
 
@@ -61,6 +63,15 @@ Use the on-chain `getOSIndex(collateral, subConditions[])` pure function — alr
 **Tx builders:** `build_trade_tx`, `build_split_collateral_tx`, `build_merge_collateral_tx`, `build_split_position_tx`, `build_merge_position_tx`, `build_redeem_tx`, `build_add_liquidity_tx`, `build_remove_liquidity_tx`, `build_withdraw_fees_tx`
 
 All tx tools return `{ transactions: UnsignedTx[], chainId }`. Transactions must be submitted in order.
+
+## ENS CCIP-Read Gateway
+
+`src/app/api/ens/[...params]/route.ts` — EIP-3668 gateway for `*.declareindependence.eth`.
+
+- URL format: `GET /api/ens/{sender}/{calldata}.json`
+- Decodes `resolve(bytes name, bytes data)` calldata, looks up market by slug or address, returns oracle-signed response
+- `contenthash` → IPFS CIDv0 for market UI; `addr` → FPMMHook address
+- `agents.declareindependence.eth` reserved (CID TBD)
 
 ## Conditional Entry Pattern (agent strategy)
 
@@ -76,7 +87,7 @@ All tx tools return `{ transactions: UnsignedTx[], chainId }`. Transactions must
 
 ## DB Schema (key columns)
 
-**markets:** `slug`, `os_index`, `collateral`, `hook_address`, `condition_id`, `conditions` (JSONB — `[{id, slots}]` for mixed markets), `end_time`, `attention_topics[]`, `attention_entities[]`, `search_vector`
+**markets:** `slug`, `os_index`, `collateral`, `hook_address`, `condition_id`, `conditions` (JSONB — `[{id, slots}]` for mixed markets), `end_time`, `attention_topics[]`, `attention_entities[]`, `search_vector`, `market_cid` (IPFS CIDv0 for ENS contenthash)
 
 **market_tokens:** `market_id`, `outcome_index`, `label`, `position_id`
 

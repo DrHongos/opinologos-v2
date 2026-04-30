@@ -151,7 +151,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ par
       // apex: declareindependence.eth → landing CID
       cid = 'QmZ5VrTMazqytDGhq445R54X7AHnHcGEQzdaKWUToxnyRD';
     } else {
-      cid = await findMarketCid(nameParts[0]);
+      const subname = nameParts[0];
+      if (subname === 'agents') {
+        cid = 'QmT7YM84prn21amR7wB7fTvNG9W3dpG3GYZ3Ez4SBf4XCs';
+      } else {
+        cid = await findMarketCid(subname);
+      }
     }
 
     // For addr queries we don't need a CID; for contenthash/text we do

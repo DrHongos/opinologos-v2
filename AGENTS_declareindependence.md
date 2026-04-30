@@ -1,18 +1,10 @@
-<!-- BEGIN:nextjs-agent-rules -->
-# This is NOT the Next.js you know
-
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
-<!-- END:nextjs-agent-rules -->
-
----
-
 # Agent Guide — Declareindependence Prediction Markets
 
 This document is for AI agents interacting with the app via its MCP server. It covers how to connect, which tools to call, and how to execute common strategies.
 
 ## MCP Server
 
-**Endpoint:** `{APP_BASE_URL}/api/mcp`
+**Endpoint:** `https://opinologos-v2.vercel.app/api/mcp`
 
 The server is stateless — each request is independent, no session setup required. Use the HTTP Streamable MCP transport (POST to the endpoint).
 
@@ -22,7 +14,7 @@ The server is stateless — each request is independent, no session setup requir
   "mcpServers": {
     "declareindependence": {
       "type": "http",
-      "url": "https://<your-deployment>/api/mcp"
+      "url": "https://opinologos-v2.vercel.app/api/mcp"
     }
   }
 }
@@ -43,6 +35,8 @@ All 19 tools are prefixed `mcp__declareindependence__` in Claude Code.
 **linearIdx:** The numeric index of a leaf outcome within a market's outcome space. For simple (single-condition) markets: 0 = No, 1 = Yes (or as labeled). For mixed markets, see the Mixed Markets section.
 
 **Transactions:** All `build_*` tools return `{ transactions: UnsignedTx[], chainId }`. Each `UnsignedTx` has `{ to, data, value, description, optional? }`. Submit them in order with the user's wallet on the correct chain.
+
+**Market file:** A market information is in stored in the contentHash of an ens subdomain formed as: `slug.declareindependence.eth`
 
 ---
 
@@ -153,7 +147,7 @@ Splits `amountUsdc` collateral into equal amounts of every outcome token. Use as
 ```
 build_merge_collateral_tx({ slug, amountUsdc, from })
 ```
-Burns equal amounts of all outcome tokens, returns `amountUsdc` collateral. Requires holding all outcomes in equal quantity.
+Burns equal amounts of all outcome tokens, returns `amountUsdc` collateral. Requires holding the amount in all outcomes.
 
 #### `build_split_position_tx` — Parent outcome → leaf outcomes (mixed markets)
 ```
