@@ -441,7 +441,7 @@ export function MarketGraph({ market }: { market: MarketData }) {
       })
         .then(bals => {
           const b = bals as bigint[];
-          //console.log(`${market.os_index} is ${b}`)
+          console.log(`${market.os_index} is ${b}`)
           setPrices(b.map((_, i) => computeImpliedPrice(b, i)));
         })
         .catch(() => {});

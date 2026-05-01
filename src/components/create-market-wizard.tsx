@@ -10,6 +10,7 @@ import {
   encodePacked,
   parseEventLogs,
   parseUnits,
+  maxUint256,
 } from 'viem';
 import {
   LMSR_HOOK_ADDRESS,
@@ -517,14 +518,6 @@ export function CreateMarketWizard() {
       const { walletClient, publicClient } = await getClients(wallet);
       const amountWad = parseUnits(fundAmount, 18);
 
-      // i think this is very wrong, liquidity must be handled by the hook
-      // Approve the PoolManager to pull collateral on behalf of the user
-      //const pmAddress = await publicClient.readContract({
-      //  address: LMSR_HOOK_ADDRESS,
-      //  abi: FPMM_ABI,
-      //  functionName: 'poolManager',
-      //}) as Hash;
-
       const pmAddress = LMSR_HOOK_ADDRESS
 
       const allowance = await publicClient.readContract({
@@ -534,12 +527,13 @@ export function CreateMarketWizard() {
         args: [wallet.address as Hash, pmAddress],
       }) as bigint;
       //console.log(allowance)
+      // allow max uint 
       if (allowance < amountWad) {
         const approveTx = await walletClient.writeContract({
           address: COLLATERAL_TOKEN,
           abi: ERC20_ABI,
           functionName: 'approve',
-          args: [pmAddress, amountWad],
+          args: [pmAddress, maxUint256],
         });
         await publicClient.waitForTransactionReceipt({ hash: approveTx });
       }

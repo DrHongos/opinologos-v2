@@ -44,6 +44,7 @@ export function ConditionPanel({ condition, osIndex, slug, ptokenAddress, onClos
   const [tab, setTab] = useState<PanelTab>('add');
   const [amount, setAmount] = useState('');
   const [feesWithdrawable, setFeesWithdrawable] = useState<bigint | null>(null);
+  // userLpBalance must be divided by total outcomes
   const [userLpBalance, setUserLpBalance] = useState<bigint | null>(null);
   const [lpTotalSupply, setLpTotalSupply] = useState<bigint | null>(null);
   const [collateralBal, setCollateralBal] = useState<bigint | null>(null);
